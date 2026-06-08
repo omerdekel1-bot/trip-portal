@@ -167,7 +167,7 @@ function Select({label,value,onChange,options,placeholder="Select…"}){
 function Btn({onClick,children,variant="primary",disabled=false,style={},small=false}){
   const V={primary:{bg:C.terra,color:"white",border:"none"},navy:{bg:C.navy,color:"white",border:"none"},outline:{bg:"transparent",color:C.terra,border:`1.5px solid ${C.terra}`},ghost:{bg:"transparent",color:C.muted,border:`1px solid ${C.border}`},danger:{bg:"transparent",color:C.red,border:`1.5px solid ${C.red}`}};
   const v=V[variant]||V.primary;
-  const disabledStyle=disabled?{background:"#9E8E7E",color:"#F5EDD8",border:"none",cursor:"not-allowed"}:{};
+  const disabledStyle=disabled?{background:"#E0D5C5",color:"#6B5840",border:"1px solid #C8B89A",cursor:"not-allowed"}:{};
   return <button onClick={disabled?undefined:onClick}
     style={{...v,...disabledStyle,padding:small?"8px 14px":"13px 20px",borderRadius:12,fontSize:small?13:15,fontWeight:600,fontFamily:"'DM Sans',sans-serif",transition:"all 0.18s",width:"100%",...style}}
     onMouseOver={e=>{if(!disabled){e.currentTarget.style.filter="brightness(1.07)";e.currentTarget.style.transform="translateY(-1px)";}}}
@@ -245,6 +245,7 @@ function TripPortal(){
   const [bBy,setBBy]=useState("");
   const [bTime,setBTime]=useState("");
   const [bCatting,setBCat]=useState(false);
+  const [editingBucket,setEditingBucket]=useState(null); // {id, title, status, lockedDate, lockedTime}
   const [newBring,setNewBring]=useState({item:"",by:""});
   const [newBuy2,setNewBuy2]=useState({item:"",by:""});
   const [orgMode,setOrg]=useState(false);
@@ -333,6 +334,15 @@ function TripPortal(){
     setBCat(false);setBPlace(null);setBStatus("");setBDate("");setBTime("");setBBy("");
   }
   async function toggleBucket(id){const upd=bucketList.map(i=>i.id===id?{...i,done:!i.done}:i);setBucket(upd);await save("tp4:bucket",upd);}
+  async function deleteBucket(id){
+    if(!confirm("Remove this item from the bucket list?"))return;
+    const upd=bucketList.filter(i=>i.id!==id);setBucket(upd);await save("tp4:bucket",upd);
+  }
+  async function saveBucketEdit(){
+    if(!editingBucket)return;
+    const upd=bucketList.map(i=>i.id===editingBucket.id?{...i,...editingBucket}:i);
+    setBucket(upd);await save("tp4:bucket",upd);setEditingBucket(null);
+  }
   async function toggleBring(id){const u=toBring.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBring(u);await save("tp4:tobring",u);}
   async function toggleBuy(id){const u=toBuy.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBuy(u);await save("tp4:tobuy",u);}
   async function addBring(){
@@ -819,23 +829,66 @@ function TripPortal(){
               <span style={{fontSize:12,color:C.muted,background:C.cream,borderRadius:20,padding:"2px 8px"}}>{items.length}</span>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:7}}>
-              {items.map(item=>{const st=BUCKET_STATUSES.find(s=>s.id===item.status);const isLocked=item.status==="locked_in";return <div key={item.id} style={{background:isLocked?`${C.navy}08`:C.card,borderRadius:12,border:`1px solid ${isLocked?`${C.navy}30`:C.border}`,overflow:"hidden",opacity:item.done?0.6:1,transition:"opacity 0.2s"}}>
-                {isLocked&&<div style={{background:C.navy,padding:"5px 14px",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:13}}>🎟️</span><span style={{color:"white",fontSize:12,fontWeight:600}}>Locked In{item.lockedDate?` · ${fDateShort(item.lockedDate)}`:""}</span></div>}
-                <div onClick={()=>toggleBucket(item.id)} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"12px 14px",cursor:"pointer"}} className="hov-row">
-                  <div style={{flexShrink:0,width:22,height:22,marginTop:1,borderRadius:6,border:`2px solid ${item.done?"#4A7C59":C.border}`,background:item.done?"#4A7C59":"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>
-                    {item.done&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:14,fontWeight:600,color:C.text,textDecoration:item.done?"line-through":"none"}}>{item.title}</div>
-                    {item.address&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{item.address}</div>}
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5,flexWrap:"wrap"}}>
-                      {st&&!isLocked&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:`${st.color}12`,border:`1px solid ${st.color}35`,borderRadius:20,padding:"2px 8px",fontSize:11,color:st.color,fontWeight:500}}>{st.icon} {st.label}</span>}
-                      <span style={{fontSize:11,color:C.muted}}>{item.addedBy} {item.source==="telegram"?"📱":"💻"}</span>
+              {items.map(item=>{
+                const st=BUCKET_STATUSES.find(s=>s.id===item.status);
+                const isLocked=item.status==="locked_in";
+                const isEditing=editingBucket?.id===item.id;
+                return <div key={item.id} style={{background:isLocked?`${C.navy}08`:C.card,borderRadius:12,border:`1px solid ${isLocked?`${C.navy}30`:C.border}`,overflow:"hidden",opacity:item.done?0.6:1,transition:"opacity 0.2s"}}>
+                  {isLocked&&!isEditing&&<div style={{background:C.navy,padding:"5px 14px",display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13}}>🎟️</span>
+                    <span style={{color:"white",fontSize:12,fontWeight:600}}>Locked In{item.lockedDate?` · ${fDateShort(item.lockedDate)}`:""}
+                    {item.lockedTime?` · ${item.lockedTime}`:""}</span>
+                  </div>}
+
+                  {isEditing?(
+                    <div style={{padding:"14px"}}>
+                      <div style={{fontSize:12,fontWeight:600,color:C.navy,marginBottom:10}}>Edit Item</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:9}}>
+                        <input value={editingBucket.title} onChange={e=>setEditingBucket(b=>({...b,title:e.target.value}))}
+                          style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:14,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                          {BUCKET_STATUSES.map(s=>{const sel=editingBucket.status===s.id;return <div key={s.id} onClick={()=>setEditingBucket(b=>({...b,status:s.id}))}
+                            style={{padding:"8px 6px",borderRadius:9,cursor:"pointer",textAlign:"center",border:`2px solid ${sel?s.color:C.border}`,background:sel?`${s.color}12`:C.bg}}>
+                            <div style={{fontSize:18,marginBottom:2}}>{s.icon}</div>
+                            <div style={{fontSize:11,fontWeight:600,color:sel?s.color:C.text}}>{s.label}</div>
+                          </div>;})}
+                        </div>
+                        {editingBucket.status==="locked_in"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                          <input type="date" value={editingBucket.lockedDate||""} onChange={e=>setEditingBucket(b=>({...b,lockedDate:e.target.value}))}
+                            style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                          <input value={editingBucket.lockedTime||""} onChange={e=>setEditingBucket(b=>({...b,lockedTime:e.target.value}))} placeholder="e.g. 10:00 AM"
+                            style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                        </div>}
+                        <div style={{display:"flex",gap:8}}>
+                          <Btn variant="ghost" onClick={()=>setEditingBucket(null)} style={{flex:"0 0 auto",width:80}} small>Cancel</Btn>
+                          <Btn onClick={saveBucketEdit} style={{flex:1}} small>Save</Btn>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  {item.mapsUrl&&<a href={item.mapsUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{flexShrink:0,fontSize:18,lineHeight:1,textDecoration:"none",marginTop:1}}>🗺️</a>}
-                </div>
-              </div>;})}
+                  ):(
+                    <div style={{display:"flex",gap:12,alignItems:"flex-start",padding:"12px 14px"}}>
+                      <div onClick={()=>toggleBucket(item.id)} style={{flexShrink:0,width:22,height:22,marginTop:1,borderRadius:6,border:`2px solid ${item.done?"#4A7C59":C.border}`,background:item.done?"#4A7C59":"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",cursor:"pointer"}}>
+                        {item.done&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}
+                      </div>
+                      <div style={{flex:1,cursor:"pointer"}} onClick={()=>toggleBucket(item.id)}>
+                        <div style={{fontSize:14,fontWeight:600,color:C.text,textDecoration:item.done?"line-through":"none"}}>{item.title}</div>
+                        {item.address&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{item.address}</div>}
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5,flexWrap:"wrap"}}>
+                          {st&&!isLocked&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:`${st.color}12`,border:`1px solid ${st.color}35`,borderRadius:20,padding:"2px 8px",fontSize:11,color:st.color,fontWeight:500}}>{st.icon} {st.label}</span>}
+                          <span style={{fontSize:11,color:C.muted}}>{item.addedBy} {item.source==="telegram"?"📱":"💻"}</span>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+                        {item.mapsUrl&&<a href={item.mapsUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:16,lineHeight:1,textDecoration:"none"}}>🗺️</a>}
+                        <button onClick={e=>{e.stopPropagation();setEditingBucket({id:item.id,title:item.title,status:item.status,lockedDate:item.lockedDate||"",lockedTime:item.lockedTime||""});}}
+                          style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 4px",color:C.muted}}>✏️</button>
+                        <button onClick={e=>{e.stopPropagation();deleteBucket(item.id);}}
+                          style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 4px",color:C.red}}>🗑️</button>
+                      </div>
+                    </div>
+                  )}
+                </div>;
+              })}
             </div>
           </div>;
         })}
