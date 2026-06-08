@@ -118,6 +118,8 @@ function mkPerson(type){return{id:`${Date.now()}${Math.random()}`,name:"",type,f
 function categorizePlace(types, title){
   const t=(types||[]).map(x=>x.toLowerCase());
   const n=(title||"").toLowerCase();
+  // Pre-check: title keywords that override type classification
+  if(/water.?park|aquatic|splash|swim.?center|pool/.test(n)) return "water";
   if(t.some(x=>["restaurant","food","meal_delivery","meal_takeaway","bar","night_club"].includes(x))) return "restaurants";
   if(t.some(x=>["cafe","coffee_shop","bakery"].includes(x))) return "cafes";
   if(t.some(x=>["shopping_mall","store","clothing_store","book_store","department_store","supermarket"].includes(x))) return "shopping";
@@ -165,8 +167,9 @@ function Select({label,value,onChange,options,placeholder="Select…"}){
 function Btn({onClick,children,variant="primary",disabled=false,style={},small=false}){
   const V={primary:{bg:C.terra,color:"white",border:"none"},navy:{bg:C.navy,color:"white",border:"none"},outline:{bg:"transparent",color:C.terra,border:`1.5px solid ${C.terra}`},ghost:{bg:"transparent",color:C.muted,border:`1px solid ${C.border}`},danger:{bg:"transparent",color:C.red,border:`1.5px solid ${C.red}`}};
   const v=V[variant]||V.primary;
+  const disabledStyle=disabled?{background:"#D4C9B8",color:"#A89880",border:"none",cursor:"not-allowed"}:{};
   return <button onClick={disabled?undefined:onClick}
-    style={{...v,padding:small?"8px 14px":"13px 20px",borderRadius:12,fontSize:small?13:15,fontWeight:600,cursor:disabled?"not-allowed":"pointer",fontFamily:"'DM Sans',sans-serif",opacity:disabled?0.4:1,transition:"all 0.18s",width:"100%",...style}}
+    style={{...v,...disabledStyle,padding:small?"8px 14px":"13px 20px",borderRadius:12,fontSize:small?13:15,fontWeight:600,fontFamily:"'DM Sans',sans-serif",transition:"all 0.18s",width:"100%",...style}}
     onMouseOver={e=>{if(!disabled){e.currentTarget.style.filter="brightness(1.07)";e.currentTarget.style.transform="translateY(-1px)";}}}
     onMouseOut={e=>{e.currentTarget.style.filter="none";e.currentTarget.style.transform="none";}}>
     {children}
@@ -240,6 +243,7 @@ function TripPortal(){
   const [bStatus,setBStatus]=useState("");
   const [bDate,setBDate]=useState("");
   const [bBy,setBBy]=useState("");
+  const [bTime,setBTime]=useState("");
   const [bCatting,setBCat]=useState(false);
   const [newBring,setNewBring]=useState({item:"",by:""});
   const [newBuy2,setNewBuy2]=useState({item:"",by:""});
@@ -324,9 +328,9 @@ function TripPortal(){
     if(!bPlace||!bStatus)return;
     setBCat(true);
     const catId = categorizePlace(bPlace.types, bPlace.title);
-    const item={id:Date.now().toString(),...bPlace,category:catId,status:bStatus,lockedDate:bStatus==="locked_in"?bDate:"",done:false,addedBy:bBy||"Anonymous",addedAt:new Date().toISOString(),source:"portal"};
+    const item={id:Date.now().toString(),...bPlace,category:catId,status:bStatus,lockedDate:bStatus==="locked_in"?bDate:"",lockedTime:bStatus==="locked_in"?bTime:"",done:false,addedBy:bBy||"Anonymous",addedAt:new Date().toISOString(),source:"portal"};
     const upd=[...bucketList,item];setBucket(upd);await save("tp4:bucket",upd);
-    setBCat(false);setBPlace(null);setBStatus("");setBDate("");setBBy("");
+    setBCat(false);setBPlace(null);setBStatus("");setBDate("");setBTime("");setBBy("");
   }
   async function toggleBucket(id){const upd=bucketList.map(i=>i.id===id?{...i,done:!i.done}:i);setBucket(upd);await save("tp4:bucket",upd);}
   async function toggleBring(id){const u=toBring.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBring(u);await save("tp4:tobring",u);}
@@ -502,27 +506,107 @@ function TripPortal(){
     </div>}
 
     {/* ── THE TRIP ──────────────────────────────────────────────────────────────── */}
-    {tab==="trip"&&trip&&<div className="fu" style={{padding:"28px 20px"}}>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>The Trip</div>
-      <div style={{color:C.muted,fontSize:14,marginBottom:22}}>Here's what we have planned</div>
-      <div style={{display:"inline-flex",alignItems:"center",gap:8,background:`${C.amber}18`,border:`1px solid ${C.amber}50`,borderRadius:20,padding:"6px 14px",fontSize:13,color:"#8A6020",fontWeight:500,marginBottom:20}}>✨ {trip.vibe}</div>
-      <Card style={{padding:20,marginBottom:14}}>
-        <div style={{fontWeight:600,fontSize:15,color:C.navy,marginBottom:18}}>🗺️ The Route</div>
-        <div style={{position:"relative"}}>
-          <div style={{position:"absolute",left:23,top:24,bottom:24,width:2,background:`linear-gradient(to bottom,${C.terra},${C.amber})`,borderRadius:1,opacity:0.5}}/>
-          {trip.stops.map((s,i)=>{const isFirst=i===0,isLast=i===trip.stops.length-1;return <div key={s.id} style={{display:"flex",gap:16,marginBottom:isLast?0:28,alignItems:"flex-start"}}>
-            <div style={{flexShrink:0,width:48,height:48,borderRadius:"50%",background:isFirst||isLast?C.terra:C.amber,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,boxShadow:"0 3px 10px rgba(192,107,58,0.22)",zIndex:1,position:"relative"}}>{s.icon}</div>
-            <div style={{flex:1,paddingTop:8}}>
-              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1.5,marginBottom:2}}>{isFirst?"Start":isLast?"Destination":`Stop ${i}`}</div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.navy,marginBottom:2}}>{s.name}</div>
-              <div style={{color:C.muted,fontSize:13,lineHeight:1.5}}>{s.note}</div>
+    {tab==="trip"&&trip&&(()=>{
+      // Build day range
+      const days=[];
+      const start=new Date(trip.startDate+"T12:00:00");
+      const end=new Date(trip.endDate+"T12:00:00");
+      for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)) days.push(d.toISOString().split("T")[0]);
+
+      const lockedItems=bucketList.filter(b=>b.status==="locked_in");
+      const scheduled=lockedItems.filter(b=>b.lockedDate);
+      const unscheduled=lockedItems.filter(b=>!b.lockedDate);
+
+      const dayLabel=(dateStr,idx)=>{
+        const d=new Date(dateStr+"T12:00:00");
+        const label=d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+        return idx===0?"Day 1 — Departure · "+label:idx===days.length-1?"Day "+(idx+1)+" — Last Day · "+label:"Day "+(idx+1)+" · "+label;
+      };
+
+      const catIcon=(catId)=>{ const c=BUCKET_CATS.find(x=>x.id===catId); return c?c.icon:"📍"; };
+
+      return <div className="fu" style={{padding:"28px 20px"}}>
+        {/* Trip header */}
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>The Trip</div>
+        <div style={{color:C.muted,fontSize:14,marginBottom:18}}>{fDate(trip.startDate)} – {fDate(trip.endDate)}</div>
+
+        <div style={{display:"inline-flex",alignItems:"center",gap:8,background:`${C.amber}18`,border:`1px solid ${C.amber}50`,borderRadius:20,padding:"6px 14px",fontSize:13,color:"#8A6020",fontWeight:500,marginBottom:16}}>✨ {trip.vibe}</div>
+
+        {trip.accommodation&&<div style={{fontSize:13,color:C.muted,marginBottom:6}}>🏠 {trip.accommodation}</div>}
+        {trip.commitments&&<div style={{fontSize:13,color:C.muted,marginBottom:20}}>📅 {trip.commitments}</div>}
+
+        <div style={{height:1,background:C.border,marginBottom:24}}/>
+
+        {lockedItems.length===0&&<div style={{textAlign:"center",padding:"40px 20px",background:C.card,borderRadius:16,border:`2px dashed ${C.border}`}}>
+          <div style={{fontSize:40,marginBottom:12}}>🗓️</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:C.navy,marginBottom:8}}>Itinerary is empty</div>
+          <div style={{color:C.muted,fontSize:14,lineHeight:1.5}}>Lock in bucket list items with a date<br/>and they'll appear here automatically</div>
+        </div>}
+
+        {/* Day blocks */}
+        {days.map((dateStr,idx)=>{
+          const dayItems=scheduled.filter(b=>b.lockedDate===dateStr)
+            .sort((a,b)=>(a.lockedTime||"99:99").localeCompare(b.lockedTime||"99:99"));
+          return <div key={dateStr} style={{marginBottom:20}}>
+            {/* Day header */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <div style={{width:36,height:36,borderRadius:10,background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <span style={{color:C.amber,fontSize:14,fontWeight:700}}>{idx+1}</span>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1.5}}>{new Date(dateStr+"T12:00:00").toLocaleDateString("en-US",{weekday:"long"})}</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:C.navy}}>{new Date(dateStr+"T12:00:00").toLocaleDateString("en-US",{month:"long",day:"numeric"})}</div>
+              </div>
             </div>
-          </div>;})}
-        </div>
-      </Card>
-      {trip.accommodation&&<Card style={{padding:18,marginBottom:14}}><div style={{fontWeight:600,fontSize:15,color:C.navy,marginBottom:8}}>🏠 Where We're Staying</div><div style={{color:C.text,fontSize:14,lineHeight:1.6}}>{trip.accommodation}</div></Card>}
-      {trip.commitments&&<Card style={{padding:18}}><div style={{fontWeight:600,fontSize:15,color:C.navy,marginBottom:8}}>📅 Already Booked</div><div style={{color:C.text,fontSize:14,lineHeight:1.6}}>{trip.commitments}</div></Card>}
-    </div>}
+
+            {dayItems.length===0
+              ?<div style={{padding:"14px 16px",background:C.card,borderRadius:12,border:`1px dashed ${C.border}`,color:C.muted,fontSize:13,fontStyle:"italic"}}>Nothing locked in yet for this day</div>
+              :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {dayItems.map((item,itemIdx)=><div key={item.id} style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:"13px 14px",display:"flex",gap:12,alignItems:"flex-start"}}>
+                  {/* Time + connector */}
+                  <div style={{flexShrink:0,textAlign:"center",minWidth:44}}>
+                    <div style={{fontSize:11,fontWeight:600,color:C.terra}}>{item.lockedTime||"—"}</div>
+                    <div style={{fontSize:18,marginTop:3}}>{catIcon(item.category)}</div>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:2}}>{item.title}</div>
+                    {item.address&&<div style={{fontSize:12,color:C.muted,lineHeight:1.4}}>{item.address}</div>}
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5}}>
+                      {item.done&&<span style={{fontSize:11,color:C.green,fontWeight:600}}>✓ Done</span>}
+                      <span style={{fontSize:11,color:C.muted}}>{item.addedBy}</span>
+                    </div>
+                  </div>
+                  {item.mapsUrl&&<a href={item.mapsUrl} target="_blank" rel="noopener noreferrer" style={{flexShrink:0,fontSize:18,lineHeight:1,textDecoration:"none",marginTop:2}}>🗺️</a>}
+                </div>)}
+              </div>
+            }
+          </div>;
+        })}
+
+        {/* Unscheduled locked items */}
+        {unscheduled.length>0&&<div style={{marginTop:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <div style={{width:36,height:36,borderRadius:10,background:C.muted,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <span style={{color:"white",fontSize:16}}>?</span>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1.5}}>No date set</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:C.navy}}>Unscheduled</div>
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {unscheduled.map(item=><div key={item.id} style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:"13px 14px",display:"flex",gap:12,alignItems:"flex-start"}}>
+              <div style={{fontSize:22,flexShrink:0,marginTop:1}}>{catIcon(item.category)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:2}}>{item.title}</div>
+                {item.address&&<div style={{fontSize:12,color:C.muted}}>{item.address}</div>}
+              </div>
+              {item.mapsUrl&&<a href={item.mapsUrl} target="_blank" rel="noopener noreferrer" style={{flexShrink:0,fontSize:18,lineHeight:1,textDecoration:"none",marginTop:2}}>🗺️</a>}
+            </div>)}
+          </div>
+        </div>}
+      </div>;
+    })()}
 
     {/* ── JOIN FORM ─────────────────────────────────────────────────────────────── */}
     {tab==="join"&&<div className="fu" style={{padding:"24px 20px"}}>
@@ -715,7 +799,10 @@ function TripPortal(){
                 <div style={{fontSize:12,fontWeight:600,color:sel?s.color:C.text}}>{s.label}</div>
               </div>;})}
             </div>
-            {bStatus==="locked_in"&&<div style={{marginBottom:12}}><Field label="Date (optional)" value={bDate} onChange={setBDate} type="date"/></div>}
+            {bStatus==="locked_in"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <Field label="Date (optional)" value={bDate} onChange={setBDate} type="date"/>
+              <Field label="Time (optional)" value={bTime} onChange={setBTime} placeholder="e.g. 10:00 AM"/>
+            </div>}
             <input value={bBy} onChange={e=>setBBy(e.target.value)} placeholder="Your name (optional)" style={{width:"100%",padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif",marginBottom:10}}/>
             <Btn onClick={addBucketItem} disabled={!bStatus||bCatting}>{bCatting?"Adding…":"✨ Add to Bucket List"}</Btn>
           </div>}
