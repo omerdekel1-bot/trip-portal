@@ -164,12 +164,31 @@ function Select({label,value,onChange,options,placeholder="Select…"}){
     </select>
   </div>;
 }
+function tripDayOptions(trip){
+  if(!trip)return[];
+  const days=[];
+  const d=new Date(trip.startDate+"T12:00:00");
+  const end=new Date(trip.endDate+"T12:00:00");
+  while(d<=end){
+    const iso=d.toISOString().split("T")[0];
+    const label=d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+    days.push({value:iso,label:`${label} — Day ${days.length+1}`});
+    d.setDate(d.getDate()+1);
+  }
+  return days;
+}
 function Btn({onClick,children,variant="primary",disabled=false,style={},small=false}){
-  const V={primary:{bg:C.terra,color:"white",border:"none"},navy:{bg:C.navy,color:"white",border:"none"},outline:{bg:"transparent",color:C.terra,border:`1.5px solid ${C.terra}`},ghost:{bg:"transparent",color:C.muted,border:`1px solid ${C.border}`},danger:{bg:"transparent",color:C.red,border:`1.5px solid ${C.red}`}};
+  const V={
+    primary:{background:C.terra,color:"white",border:"none"},
+    navy:   {background:C.navy, color:"white",border:"none"},
+    outline:{background:"transparent",color:C.terra,border:`1.5px solid ${C.terra}`},
+    ghost:  {background:"transparent",color:C.muted, border:`1px solid ${C.border}`},
+    danger: {background:"transparent",color:C.red,   border:`1.5px solid ${C.red}`},
+  };
   const v=V[variant]||V.primary;
   const disabledStyle=disabled?{background:"#E0D5C5",color:"#6B5840",border:"1px solid #C8B89A",cursor:"not-allowed"}:{};
   return <button onClick={disabled?undefined:onClick}
-    style={{...v,...disabledStyle,padding:small?"8px 14px":"13px 20px",borderRadius:12,fontSize:small?13:15,fontWeight:600,fontFamily:"'DM Sans',sans-serif",transition:"all 0.18s",width:"100%",...style}}
+    style={{...v,...disabledStyle,padding:small?"8px 14px":"13px 20px",borderRadius:12,fontSize:small?13:15,fontWeight:600,cursor:disabled?"not-allowed":"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.18s",width:"100%",...style}}
     onMouseOver={e=>{if(!disabled){e.currentTarget.style.filter="brightness(1.07)";e.currentTarget.style.transform="translateY(-1px)";}}}
     onMouseOut={e=>{e.currentTarget.style.filter="none";e.currentTarget.style.transform="none";}}>
     {children}
@@ -810,7 +829,13 @@ function TripPortal(){
               </div>;})}
             </div>
             {bStatus==="locked_in"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-              <Field label="Date (optional)" value={bDate} onChange={setBDate} type="date"/>
+              <div>
+                <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:5}}>Day</div>
+                <select value={bDate} onChange={e=>setBDate(e.target.value)} style={{width:"100%",padding:"12px 14px",borderRadius:11,border:`1.5px solid ${C.border}`,background:C.bg,fontSize:14,color:bDate?C.text:C.muted,fontFamily:"'DM Sans',sans-serif",appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238A7A6A' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 14px center"}}>
+                  <option value="">Which day?</option>
+                  {tripDayOptions(trip).map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
+                </select>
+              </div>
               <Field label="Time (optional)" value={bTime} onChange={setBTime} placeholder="e.g. 10:00 AM"/>
             </div>}
             <input value={bBy} onChange={e=>setBBy(e.target.value)} placeholder="Your name (optional)" style={{width:"100%",padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif",marginBottom:10}}/>
@@ -854,8 +879,11 @@ function TripPortal(){
                           </div>;})}
                         </div>
                         {editingBucket.status==="locked_in"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                          <input type="date" value={editingBucket.lockedDate||""} onChange={e=>setEditingBucket(b=>({...b,lockedDate:e.target.value}))}
-                            style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                          <select value={editingBucket.lockedDate||""} onChange={e=>setEditingBucket(b=>({...b,lockedDate:e.target.value}))}
+                            style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif",appearance:"none"}}>
+                            <option value="">Which day?</option>
+                            {tripDayOptions(trip).map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
+                          </select>
                           <input value={editingBucket.lockedTime||""} onChange={e=>setEditingBucket(b=>({...b,lockedTime:e.target.value}))} placeholder="e.g. 10:00 AM"
                             style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
                         </div>}
