@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>Trip Portal</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#FAF3E4;font-family:'DM Sans',sans-serif;overscroll-behavior:none;}
+    input,textarea,select{outline:none;font-family:'DM Sans',sans-serif;}
+    ::-webkit-scrollbar{width:5px;}
+    ::-webkit-scrollbar-thumb{background:#E8D5B4;border-radius:3px;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    .fu{animation:fadeUp 0.3s ease forwards;}
+    @keyframes popIn{from{opacity:0;transform:scale(0.94)}to{opacity:1;transform:scale(1)}}
+    .pi{animation:popIn 0.28s ease forwards;}
+    .hov-card{transition:all 0.18s;}
+    .hov-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(28,22,18,0.10)!important;}
+    .hov-row{transition:background 0.13s;}
+    .hov-row:hover{background:rgba(232,164,64,0.06)!important;}
+    .nav-btn{transition:all 0.15s;}
+    select option{color:#1C1612;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const SCRIPT_URL    = "https://script.google.com/macros/s/AKfycbz76d8ec4HDz-K6JmAEKCh7i0yLvAv6cOmK_ZZDrQd9on19bliPsQTVEKhdzvoBkypgwg/exec";
+const PLACES_KEY    = "AIzaSyBE-zm47kNFiDqpJreQ2nXRw_vhyhgYlM4";
+const ORGANIZER_PIN = "1234";
+
+// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
+const C = {
+  bg:"#FAF3E4", card:"#FFFDF7", terra:"#C06B3A", amber:"#E8A440",
+  navy:"#1A2B52", navyMid:"#2C3E6B", text:"#1C1612", muted:"#8A7A6A",
+  border:"#E8D5B4", green:"#4A7C59", red:"#C0443A", cream:"#F5EDD8",
+};
+
+// ─── DATA ─────────────────────────────────────────────────────────────────────
+const DEFAULT_TRIP = {
+  name:"Blue Ridge Summer", destination:"Shenandoah Valley, VA",
+  emoji:"🏔️", startDate:"2026-07-04", endDate:"2026-07-07",
+  tagline:"Slow mornings, mountain air, and the whole family together.",
+  vibe:"Relaxed outdoor adventure",
+  stops:[
+    {id:"s1",name:"Rockville, MD",  note:"Departure — 8am sharp",               icon:"🏠"},
+    {id:"s2",name:"Skyline Drive",   note:"Scenic overlook + picnic lunch",      icon:"🌄"},
+    {id:"s3",name:"Luray Caverns",   note:"Underground adventure (booked Jul 5)",icon:"🪨"},
+    {id:"s4",name:"Front Royal, VA", note:"Cabin home base — 3 nights",          icon:"🏕️"},
+  ],
+  accommodation:"Blue Ridge Cabin · Sleeps 16 · Full kitchen · Fire pit · Pool",
+  commitments:"Luray Caverns — Jul 5 @ 10am · Group dinner — Jul 6 @ 7pm",
+};
+const FOOD_PROFILES = [
+  {id:"vacation",   label:"Vacation Mode",   sub:"No restrictions",          icon:"🎉",color:"#C06B3A"},
+  {id:"protein",    label:"Protein Focused", sub:"Meat, eggs, high-protein", icon:"💪",color:"#4A7C59"},
+  {id:"meat",       label:"Meat Lover",       sub:"Steak, BBQ, carnivore",    icon:"🥩",color:"#8B3A3A"},
+  {id:"veggie",     label:"Vegetarian",       sub:"No meat",                  icon:"🥗",color:"#5A8A4A"},
+  {id:"vegan",      label:"Vegan",            sub:"Plant-based only",         icon:"🌱",color:"#4A7A5A"},
+  {id:"pescatarian",label:"Pescatarian",      sub:"Fish yes, meat no",        icon:"🐟",color:"#3A6A8A"},
+  {id:"keto",       label:"Keto / Low-Carb",  sub:"High fat, low carbs",      icon:"🧀",color:"#8A6A3A"},
+  {id:"glutenfree", label:"Gluten-Free",      sub:"Celiac or sensitivity",    icon:"🌾",color:"#8A7A3A"},
+];
+const KID_PROFILES = [
+  {id:"kid_all",    label:"Eats Everything", sub:"No restrictions",           icon:"🍕",color:"#C06B3A"},
+  {id:"kid_picky",  label:"Picky Eater",      sub:"Plain, simple foods",       icon:"🥕",color:"#8A6A3A"},
+  {id:"kid_allergy",label:"Has Restrictions", sub:"Allergy or specific need",  icon:"⚠️",color:"#C0443A"},
+];
+const INTERESTS = [
+  {id:"hiking",     label:"Hiking & Trails",        icon:"🥾",group:"Outdoors"},
+  {id:"swimming",   label:"Swimming / Water",        icon:"🏊",group:"Outdoors"},
+  {id:"scenic",     label:"Scenic Drives & Views",   icon:"🌅",group:"Outdoors"},
+  {id:"campfire",   label:"Campfire & Outdoors",     icon:"🏕️",group:"Outdoors"},
+  {id:"restaurants",label:"Restaurants & Local Food",icon:"🍽️",group:"Food & Drink"},
+  {id:"coffee",     label:"Coffee & Cafés",          icon:"☕",group:"Food & Drink"},
+  {id:"icecream",   label:"Ice Cream & Treats",      icon:"🍦",group:"Food & Drink"},
+  {id:"breweries",  label:"Breweries / Wineries",    icon:"🍺",group:"Food & Drink"},
+  {id:"history",    label:"History & Museums",       icon:"🏛️",group:"Culture"},
+  {id:"arts",       label:"Arts & Local Culture",    icon:"🎨",group:"Culture"},
+  {id:"shopping",   label:"Shopping & Markets",      icon:"🛍️",group:"Culture"},
+  {id:"photos",     label:"Photography Spots",       icon:"📸",group:"Culture"},
+  {id:"rest",       label:"Rest & Recharge",         icon:"😴",group:"Pace"},
+  {id:"kidsact",    label:"Kid-Centered Fun",        icon:"🎠",group:"Pace"},
+  {id:"games",      label:"Games & Group Fun",       icon:"🎲",group:"Pace"},
+  {id:"slow",       label:"Slow & Easy",             icon:"🌿",group:"Pace"},
+];
+const BUCKET_CATS = [
+  {id:"restaurants",label:"Restaurants",     icon:"🍽️"},
+  {id:"hikes",      label:"Hikes & Trails",  icon:"🥾"},
+  {id:"lookouts",   label:"Lookout Points",  icon:"🌅"},
+  {id:"attractions",label:"Attractions",     icon:"🏛️"},
+  {id:"cafes",      label:"Cafés",           icon:"☕"},
+  {id:"shopping",   label:"Shopping",        icon:"🛍️"},
+  {id:"events",     label:"Events",          icon:"🎭"},
+  {id:"water",      label:"Water & Swimming",icon:"🌊"},
+];
+const BUCKET_STATUSES = [
+  {id:"must_see",   label:"Must See",   icon:"🌟",color:"#C06B3A"},
+  {id:"good_option",label:"Good Option",icon:"👍",color:"#4A7C59"},
+  {id:"locked_in",  label:"Locked In",  icon:"🎟️",color:"#1A2B52"},
+];
+const CAR_TOLERANCE = ["Loves road trips","Good up to 2hrs","Needs breaks","Keep it short"];
+const NAP_SCHEDULES = ["No nap needed","Morning nap","Afternoon nap","Two naps daily","Flexible"];
+const AVATAR_COLORS = ["#C06B3A","#1A2B52","#4A7C59","#8B5E3C","#6B4C8A","#2C7A7A"];
+const STEPS = ["Your Household","Who's Coming","Food Preferences","Interests","Contributions"];
+
+function mkForm(){return{householdName:"",origin:"",people:[],interests:[],notes:"",toBring:"",toBuy:""};}
+function mkPerson(type){return{id:`${Date.now()}${Math.random()}`,name:"",type,foodProfiles:[],allergies:"",...(type==="kid"?{age:"",napSchedule:"",carTolerance:""}:{})};}
+
+// ─── AI CATEGORIZE ────────────────────────────────────────────────────────────
+async function aiCategorize(title){
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:20,
+        messages:[{role:"user",content:`Categorize this travel spot into ONE of: restaurants, hikes, lookouts, attractions, cafes, shopping, events, water. Spot: "${title}". Reply with ONLY the category id.`}]})
+    });
+    const data=await res.json();
+    const cat=data.content?.[0]?.text?.trim().toLowerCase().replace(/[^a-z]/g,"");
+    return BUCKET_CATS.find(c=>c.id===cat)||BUCKET_CATS.find(c=>c.id==="attractions");
+  }catch{return BUCKET_CATS.find(c=>c.id==="attractions");}
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function Chip({icon,text,color}){
+  return <span style={{display:"inline-flex",alignItems:"center",gap:3,background:color?`${color}18`:"#F0E6D0",border:color?`1px solid ${color}40`:"none",borderRadius:20,padding:"3px 9px",fontSize:11,color:color||"#6B5840",whiteSpace:"nowrap",fontWeight:500}}>{icon} {text}</span>;
+}
+function Field({label,value,onChange,placeholder="",multiline=false,type="text",note}){
+  const [fc,setFc]=useState(false);
+  const base={width:"100%",padding:"12px 14px",borderRadius:11,fontFamily:"'DM Sans',sans-serif",border:`1.5px solid ${fc?C.terra:C.border}`,background:C.bg,fontSize:15,color:C.text,lineHeight:1.5,transition:"border-color 0.18s"};
+  return <div>
+    <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:5}}>{label}</div>
+    {note&&<div style={{fontSize:12,color:C.muted,marginBottom:6,fontStyle:"italic"}}>{note}</div>}
+    {multiline
+      ?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={3} style={{...base,resize:"none"}} onFocus={()=>setFc(true)} onBlur={()=>setFc(false)}/>
+      :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={base} onFocus={()=>setFc(true)} onBlur={()=>setFc(false)}/>
+    }
+  </div>;
+}
+function Select({label,value,onChange,options,placeholder="Select…"}){
+  return <div>
+    {label&&<div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:5}}>{label}</div>}
+    <select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",padding:"12px 14px",borderRadius:11,border:`1.5px solid ${C.border}`,background:C.bg,fontSize:14,color:value?C.text:C.muted,fontFamily:"'DM Sans',sans-serif",appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238A7A6A' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 14px center"}}>
+      <option value="">{placeholder}</option>
+      {options.map(o=><option key={o} value={o}>{o}</option>)}
+    </select>
+  </div>;
+}
+function Btn({onClick,children,variant="primary",disabled=false,style={},small=false}){
+  const V={primary:{bg:C.terra,color:"white",border:"none"},navy:{bg:C.navy,color:"white",border:"none"},outline:{bg:"transparent",color:C.terra,border:`1.5px solid ${C.terra}`},ghost:{bg:"transparent",color:C.muted,border:`1px solid ${C.border}`},danger:{bg:"transparent",color:C.red,border:`1.5px solid ${C.red}`}};
+  const v=V[variant]||V.primary;
+  return <button onClick={disabled?undefined:onClick}
+    style={{...v,padding:small?"8px 14px":"13px 20px",borderRadius:12,fontSize:small?13:15,fontWeight:600,cursor:disabled?"not-allowed":"pointer",fontFamily:"'DM Sans',sans-serif",opacity:disabled?0.4:1,transition:"all 0.18s",width:"100%",...style}}
+    onMouseOver={e=>{if(!disabled){e.currentTarget.style.filter="brightness(1.07)";e.currentTarget.style.transform="translateY(-1px)";}}}
+    onMouseOut={e=>{e.currentTarget.style.filter="none";e.currentTarget.style.transform="none";}}>
+    {children}
+  </button>;
+}
+function Card({children,style={}}){return <div style={{background:C.card,borderRadius:16,border:`1px solid ${C.border}`,boxShadow:"0 2px 12px rgba(28,22,18,0.05)",overflow:"hidden",...style}}>{children}</div>;}
+function initials(n){return(n||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();}
+function avatarBg(n){let h=0;for(let c of(n||""))h+=c.charCodeAt(0);return AVATAR_COLORS[h%AVATAR_COLORS.length];}
+function fDate(d){if(!d)return"";return new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});}
+function fDateShort(d){if(!d)return"";return new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});}
+
+// ─── PLACES SEARCH ────────────────────────────────────────────────────────────
+function PlacesSearch({onSelect,mapsReady}){
+  const [q,setQ]=useState("");
+  const [preds,setPreds]=useState([]);
+  const [loading,setLoad]=useState(false);
+  const [open,setOpen]=useState(false);
+  const timer=useRef(null);
+  useEffect(()=>{
+    if(!mapsReady||q.length<2){setPreds([]);setOpen(false);return;}
+    clearTimeout(timer.current);
+    timer.current=setTimeout(()=>{
+      const svc=new window.google.maps.places.AutocompleteService();
+      svc.getPlacePredictions({input:q},(results,status)=>{
+        if(status===window.google.maps.places.PlacesServiceStatus.OK){setPreds(results||[]);setOpen(true);}
+        else{setPreds([]);setOpen(false);}
+      });
+    },320);
+    return()=>clearTimeout(timer.current);
+  },[q,mapsReady]);
+  function pick(pred){
+    setLoad(true);setOpen(false);setQ("");
+    const div=document.createElement("div");
+    const svc=new window.google.maps.places.PlacesService(div);
+    svc.getDetails({placeId:pred.place_id,fields:["name","formatted_address","geometry","url"]},(place,status)=>{
+      setLoad(false);
+      if(status===window.google.maps.places.PlacesServiceStatus.OK){
+        onSelect({title:place.name,address:place.formatted_address,mapsUrl:place.url,placeId:pred.place_id,lat:place.geometry?.location?.lat(),lng:place.geometry?.location?.lng()});
+      }
+    });
+  }
+  if(!mapsReady)return <div style={{padding:"12px 14px",background:C.cream,borderRadius:10,fontSize:13,color:C.muted,textAlign:"center"}}>🔑 Places API loading…</div>;
+  return <div style={{position:"relative"}}>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search Google Maps…" style={{width:"100%",padding:"12px 14px",borderRadius:11,border:`1.5px solid ${C.border}`,background:C.bg,fontSize:15,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+    {loading&&<div style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",fontSize:13,color:C.muted}}>⏳</div>}
+    {open&&preds.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,boxShadow:"0 8px 24px rgba(28,22,18,0.12)",overflow:"hidden",marginTop:4}}>
+      {preds.slice(0,5).map(p=><div key={p.place_id} onClick={()=>pick(p)} style={{padding:"12px 14px",cursor:"pointer",borderBottom:`1px solid ${C.border}`}} onMouseOver={e=>e.currentTarget.style.background=C.cream} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+        <div style={{fontSize:14,fontWeight:500,color:C.text}}>{p.structured_formatting?.main_text||p.description}</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:2}}>{p.structured_formatting?.secondary_text||""}</div>
+      </div>)}
+    </div>}
+  </div>;
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function TripPortal(){
+  const [tab,setTab]=useState("hero");
+  const [trip,setTrip]=useState(null);
+  const [households,setHH]=useState([]);
+  const [bucketList,setBucket]=useState([]);
+  const [toBring,setToBring]=useState([]);
+  const [toBuy,setToBuy]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [cd,setCd]=useState({days:0,hours:0,minutes:0,seconds:0});
+  const [mapsReady,setMaps]=useState(false);
+  const [step,setStep]=useState(0);
+  const [form,setForm]=useState(mkForm());
+  const [submitted,setSub]=useState(false);
+  const [listTab,setListTab]=useState("bucket");
+  const [bPlace,setBPlace]=useState(null);
+  const [bStatus,setBStatus]=useState("");
+  const [bDate,setBDate]=useState("");
+  const [bBy,setBBy]=useState("");
+  const [bCatting,setBCat]=useState(false);
+  const [newBring,setNewBring]=useState({item:"",by:""});
+  const [newBuy2,setNewBuy2]=useState({item:"",by:""});
+  const [orgMode,setOrg]=useState(false);
+  const [showPin,setShowPin]=useState(false);
+  const [pinVal,setPinVal]=useState("");
+  const [pinErr,setPinErr]=useState(false);
+  const [editMode,setEditMode]=useState(false);
+  const [editTrip,setEditTrip]=useState(null);
+  const [toast,setToast]=useState(null);
+  const [showExport,setShowExp]=useState(false);
+  const [exportMdText,setExpMd]=useState("");
+
+  useEffect(()=>{loadAll();},[]);
+  useEffect(()=>{
+    // Load Google Maps Places
+    if(window.google?.maps?.places){setMaps(true);return;}
+    const s=document.createElement("script");
+    s.src=`https://maps.googleapis.com/maps/api/js?key=${PLACES_KEY}&libraries=places`;
+    s.async=true;s.onload=()=>setMaps(true);
+    document.head.appendChild(s);
+  },[]);
+  useEffect(()=>{
+    if(!trip)return;
+    const t=setInterval(()=>{
+      const diff=new Date(trip.startDate+"T08:00:00")-Date.now();
+      if(diff<=0){clearInterval(t);return;}
+      setCd({days:Math.floor(diff/86400000),hours:Math.floor((diff%86400000)/3600000),minutes:Math.floor((diff%3600000)/60000),seconds:Math.floor((diff%60000)/1000)});
+    },1000);
+    return()=>clearInterval(t);
+  },[trip]);
+
+  // ── DATA LAYER — Google Sheets via Apps Script ─────────────────────────────
+  async function loadAll(){
+    setLoading(true);
+    const load=async(key,fallback)=>{
+      try{
+        const res=await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`,{redirect:"follow"});
+        const data=await res.json();
+        if(data.error||!data.value)return fallback;
+        return JSON.parse(data.value);
+      }catch{return fallback;}
+    };
+    setTrip(await load("tp4:config",DEFAULT_TRIP));
+    setHH(await load("tp4:hh",[]));
+    setBucket(await load("tp4:bucket",[]));
+    setToBring(await load("tp4:tobring",[]));
+    setToBuy(await load("tp4:tobuy",[]));
+    setLoading(false);
+  }
+  function showToast(msg,ok=true){setToast({msg,ok});setTimeout(()=>setToast(null),3500);}
+  async function save(k,v){
+    try{
+      const res=await fetch(SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({key:k,value:JSON.stringify(v)}),redirect:"follow"});
+      const data=await res.json();
+      if(data.error){showToast("⚠️ Sheet error: "+data.error,false);return false;}
+      return true;
+    }catch(e){showToast("⚠️ Save failed: "+(e?.message||"network error"),false);return false;}
+  }
+
+  // ── ACTIONS ───────────────────────────────────────────────────────────────────
+  async function submitForm(){
+    if(!form.householdName.trim())return;
+    const hh={id:Date.now().toString(),...form,submittedAt:new Date().toISOString()};
+    const newHH=[...households,hh];setHH(newHH);
+    if(form.toBring.trim()){
+      let upd=[...toBring];
+      form.toBring.split(",").map(s=>s.trim()).filter(Boolean).forEach(item=>{upd=[...upd,{id:Date.now().toString()+Math.random(),item,by:form.householdName,checked:false,source:"portal"}];});
+      setToBring(upd);await save("tp4:tobring",upd);
+    }
+    if(form.toBuy.trim()){
+      let upd=[...toBuy];
+      form.toBuy.split(",").map(s=>s.trim()).filter(Boolean).forEach(item=>{upd=[...upd,{id:Date.now().toString()+Math.random(),item,by:form.householdName,checked:false,source:"portal"}];});
+      setToBuy(upd);await save("tp4:tobuy",upd);
+    }
+    const saved=await save("tp4:hh",newHH);
+    setSub(true);
+    if(saved)showToast("✅ Saved to Google Sheet!");
+    setTimeout(()=>{setSub(false);setForm(mkForm());setStep(0);setTab("crew");},2400);
+  }
+  async function addBucketItem(){
+    if(!bPlace||!bStatus)return;
+    setBCat(true);
+    const cat=await aiCategorize(bPlace.title);
+    const item={id:Date.now().toString(),...bPlace,category:cat.id,status:bStatus,lockedDate:bStatus==="locked_in"?bDate:"",done:false,addedBy:bBy||"Anonymous",addedAt:new Date().toISOString(),source:"portal"};
+    const upd=[...bucketList,item];setBucket(upd);await save("tp4:bucket",upd);
+    setBCat(false);setBPlace(null);setBStatus("");setBDate("");setBBy("");
+  }
+  async function toggleBucket(id){const upd=bucketList.map(i=>i.id===id?{...i,done:!i.done}:i);setBucket(upd);await save("tp4:bucket",upd);}
+  async function toggleBring(id){const u=toBring.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBring(u);await save("tp4:tobring",u);}
+  async function toggleBuy(id){const u=toBuy.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBuy(u);await save("tp4:tobuy",u);}
+  async function addBring(){
+    if(!newBring.item.trim())return;
+    const u=[...toBring,{id:Date.now().toString(),item:newBring.item.trim(),by:newBring.by||"Anonymous",checked:false,source:"portal"}];
+    setToBring(u);await save("tp4:tobring",u);setNewBring({item:"",by:""});
+  }
+  async function addBuy(){
+    if(!newBuy2.item.trim())return;
+    const u=[...toBuy,{id:Date.now().toString(),item:newBuy2.item.trim(),by:newBuy2.by||"Anonymous",checked:false,source:"portal"}];
+    setToBuy(u);await save("tp4:tobuy",u);setNewBuy2({item:"",by:""});
+  }
+  async function saveTrip(){
+    setTrip(editTrip);
+    const ok=await save("tp4:config",editTrip);
+    setEditMode(false);
+    if(ok)showToast("✅ Trip details saved!");
+  }
+  async function resetAll(){
+    if(!confirm("Reset ALL trip data? Cannot be undone."))return;
+    setTrip(DEFAULT_TRIP);setHH([]);setBucket([]);setToBring([]);setToBuy([]);
+    await save("tp4:config",DEFAULT_TRIP);await save("tp4:hh",[]);
+    await save("tp4:bucket",[]);await save("tp4:tobring",[]);await save("tp4:tobuy",[]);
+    showToast("✅ All data reset");
+  }
+  function tryPin(){
+    if(pinVal===ORGANIZER_PIN){setOrg(true);setShowPin(false);setPinVal("");setPinErr(false);setEditTrip({...trip});setTab("admin");}
+    else setPinErr(true);
+  }
+
+  // ── FORM HELPERS ──────────────────────────────────────────────────────────────
+  const upd=(f,v)=>setForm(x=>({...x,[f]:v}));
+  const updP=(idx,f,v)=>setForm(x=>({...x,people:x.people.map((p,i)=>i===idx?{...p,[f]:v}:p)}));
+  const togProf=(idx,pid)=>setForm(x=>({...x,people:x.people.map((p,i)=>i===idx?{...p,foodProfiles:(p.foodProfiles||[]).includes(pid)?p.foodProfiles.filter(x=>x!==pid):[...p.foodProfiles,pid]}:p)}));
+  const togInt=(id)=>setForm(x=>({...x,interests:x.interests.includes(id)?x.interests.filter(y=>y!==id):[...x.interests,id]}));
+
+  // ── EXPORT MD ────────────────────────────────────────────────────────────────
+  function exportMd(){
+    if(!trip)return;
+    const catGroups={};BUCKET_CATS.forEach(c=>{catGroups[c.id]=[];});
+    bucketList.forEach(b=>{if(catGroups[b.category])catGroups[b.category].push(b);});
+    const statusOrder={locked_in:0,must_see:1,good_option:2};
+    Object.keys(catGroups).forEach(k=>{catGroups[k].sort((a,b)=>(statusOrder[a.status]??9)-(statusOrder[b.status]??9));});
+    const intFreq={};
+    households.forEach(hh=>(hh.interests||[]).forEach(i=>{intFreq[i]=(intFreq[i]||0)+1;}));
+    const topInt=Object.entries(intFreq).sort((a,b)=>b[1]-a[1]).map(([id,n])=>{const it=INTERESTS.find(x=>x.id===id);return it?`${it.icon} ${it.label} (${n}×)`:""}).filter(Boolean);
+    const lines=[
+      `# ${trip.emoji} ${trip.name}`,`> *${trip.tagline}*`,"",
+      `**📍 Destination:** ${trip.destination}`,
+      `**📅 Dates:** ${fDate(trip.startDate)} → ${fDate(trip.endDate)}`,
+      `**✨ Vibe:** ${trip.vibe}`,"",
+      `## 🗺️ Route`,...trip.stops.map((s,i)=>`${i+1}. **${s.name}** — ${s.note}`),"",
+      `## 🏠 Accommodation`,trip.accommodation||"—","",
+      `## 📅 Fixed Commitments`,trip.commitments||"—","",
+      `## 👨‍👩‍👧‍👦 Who's Coming (${households.length} household${households.length!==1?"s":""})`,
+      ...(households.length?households.flatMap(hh=>{
+        const adults=(hh.people||[]).filter(p=>p.type==="adult");
+        const kids=(hh.people||[]).filter(p=>p.type==="kid");
+        const intL=(hh.interests||[]).map(id=>{const it=INTERESTS.find(x=>x.id===id);return it?`${it.icon} ${it.label}`:""}).filter(Boolean).join(", ");
+        return[`### ${hh.householdName}`,`- **From:** ${hh.origin||"—"}`,
+          adults.length?`**Adults:** ${adults.map(p=>{const ls=(p.foodProfiles||[]).map(id=>{const fp=FOOD_PROFILES.find(x=>x.id===id);return fp?`${fp.icon} ${fp.label}`:""}).filter(Boolean).join(", ");return`${p.name}: ${ls||"No profile"}${p.allergies?` · ⚠️ ${p.allergies}`:""}`}).join(" | ")}`:"",
+          kids.length?"**Kids:**":"",
+          ...kids.map(p=>{const ls=(p.foodProfiles||[]).map(id=>{const fp=KID_PROFILES.find(x=>x.id===id);return fp?`${fp.icon} ${fp.label}`:""}).filter(Boolean).join(", ");return`  - ${p.name}${p.age?` (${p.age}yo)`:""}: ${ls||"No profile"} · Nap: ${p.napSchedule||"—"} · Car: ${p.carTolerance||"—"}${p.allergies?` · ⚠️ ${p.allergies}`:""}`}),
+          intL?`**Interests:** ${intL}`:"",hh.notes?`**Notes:** ${hh.notes}`:"","",
+        ].filter(s=>s!=="");
+      }):["_No submissions yet._",""]),
+      `## 🍽️ Food & Allergy Matrix`,"| Person | HH | Profile | Allergies |","|--------|-----|---------|-----------|",
+      ...households.flatMap(hh=>(hh.people||[]).map(p=>{const pool=p.type==="kid"?KID_PROFILES:FOOD_PROFILES;const ls=(p.foodProfiles||[]).map(id=>{const fp=pool.find(x=>x.id===id);return fp?`${fp.icon} ${fp.label}`:""}).filter(Boolean).join(", ");return`| ${p.name} | ${hh.householdName} | ${ls||"—"} | ${p.allergies||"None"} |`;})),"",
+      `## 🌟 Top Interests`,topInt.join(" · ")||"—","",
+      `## ⭐ Bucket List`,
+      ...BUCKET_CATS.flatMap(cat=>{const items=catGroups[cat.id];if(!items.length)return[];return[`### ${cat.icon} ${cat.label}`,...items.map(b=>{const st=BUCKET_STATUSES.find(s=>s.id===b.status);return`- [${b.done?"x":" "}] **${b.title}** ${st?`${st.icon} ${st.label}`:""}${b.lockedDate?` · ${fDateShort(b.lockedDate)}`:""}${b.address?` · ${b.address}`:""} *(${b.addedBy})*${b.mapsUrl?` [Maps](${b.mapsUrl})`:""}`}),""];}),
+      `## 🎒 To Bring`,...toBring.map(i=>`- [${i.checked?"x":" "}] ${i.item} *(${i.by})*`),"",
+      `## 🛒 To Buy`,...toBuy.map(i=>`- [${i.checked?"x":" "}] ${i.item} *(requested by ${i.by})*`),
+    ];
+    setExpMd(lines.join("\n"));setShowExp(true);
+  }
+
+  const navItems=[
+    {id:"hero",icon:"🏠",label:"Home"},{id:"trip",icon:"🗺️",label:"The Trip"},
+    {id:"join",icon:"✋",label:"Join"},{id:"crew",icon:"👥",label:"Crew"},
+    {id:"lists",icon:"⭐",label:"Lists"},
+    ...(orgMode?[{id:"admin",icon:"⚙️",label:"Admin"}]:[]),
+  ];
+
+  if(loading)return <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+    <div style={{fontSize:52}}>🗺️</div>
+    <div style={{color:C.terra,fontSize:17,fontWeight:500}}>Loading your trip…</div>
+    <div style={{fontSize:13,color:C.muted}}>Connecting to Google Sheets</div>
+  </div>;
+
+  return <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'DM Sans',sans-serif",color:C.text,paddingBottom:82,maxWidth:640,margin:"0 auto",position:"relative"}}>
+
+    {/* TOAST */}
+    {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:toast.ok?C.navy:C.red,color:"white",padding:"10px 20px",borderRadius:12,fontSize:14,fontWeight:500,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",whiteSpace:"nowrap",zIndex:600}} className="pi">{toast.msg}</div>}
+
+    {/* EXPORT MODAL */}
+    {showExport&&<div style={{position:"fixed",inset:0,background:"rgba(10,10,20,0.7)",backdropFilter:"blur(4px)",zIndex:500,display:"flex",flexDirection:"column",padding:20}}>
+      <div style={{background:C.card,borderRadius:20,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:"100%"}} className="pi">
+        <div style={{padding:"18px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.navy}}>TRIP.md</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:2}}>Copy and save to Google Drive</div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={()=>{if(navigator.clipboard){navigator.clipboard.writeText(exportMdText).then(()=>showToast("✅ Copied to clipboard!"));}else{const el=document.querySelector("#export-ta");el.select();document.execCommand("copy");showToast("✅ Copied!");}}} style={{padding:"8px 16px",borderRadius:10,border:"none",background:C.terra,color:"white",fontSize:13,fontWeight:600,cursor:"pointer"}}>Copy All</button>
+            <button onClick={()=>setShowExp(false)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:C.muted,lineHeight:1}}>×</button>
+          </div>
+        </div>
+        <textarea id="export-ta" readOnly value={exportMdText} style={{flex:1,padding:"16px 20px",border:"none",background:C.bg,fontSize:12,fontFamily:"'Courier New',monospace",lineHeight:1.6,color:C.text,resize:"none",outline:"none",overflowY:"auto"}}/>
+      </div>
+    </div>}
+
+    {/* PIN MODAL */}
+    {showPin&&<div style={{position:"fixed",inset:0,background:"rgba(10,10,20,0.65)",backdropFilter:"blur(6px)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:C.card,borderRadius:24,padding:32,width:"100%",maxWidth:360,textAlign:"center"}} className="pi">
+        <div style={{fontSize:44,marginBottom:14}}>🔐</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:C.navy,marginBottom:6}}>Organizer Access</div>
+        <div style={{color:C.muted,fontSize:14,marginBottom:22,lineHeight:1.5}}>Enter your PIN to manage this trip</div>
+        <input type="password" value={pinVal} onChange={e=>{setPinVal(e.target.value);setPinErr(false);}} onKeyDown={e=>e.key==="Enter"&&tryPin()} placeholder="• • • •" autoFocus style={{width:"100%",padding:"14px",borderRadius:12,border:`2px solid ${pinErr?"#C0443A":C.border}`,fontSize:22,textAlign:"center",letterSpacing:10,marginBottom:10,background:C.bg}}/>
+        {pinErr&&<div style={{color:C.red,fontSize:13,marginBottom:10}}>Incorrect PIN.</div>}
+        <div style={{display:"flex",gap:10,marginTop:4}}>
+          <Btn variant="ghost" onClick={()=>{setShowPin(false);setPinVal("");setPinErr(false);}} style={{flex:1}}>Cancel</Btn>
+          <Btn onClick={tryPin} style={{flex:1}}>Enter</Btn>
+        </div>
+      </div>
+    </div>}
+
+    {/* ── HERO ──────────────────────────────────────────────────────────────────── */}
+    {tab==="hero"&&trip&&<div className="fu">
+      <div style={{background:`linear-gradient(145deg,${C.navy} 0%,${C.navyMid} 55%,#3A5280 100%)`,padding:"48px 24px 40px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:-60,right:-40,width:240,height:240,borderRadius:"50%",background:"rgba(232,164,64,0.07)",pointerEvents:"none"}}/>
+        <div style={{position:"absolute",bottom:-80,left:-30,width:200,height:200,borderRadius:"50%",background:"rgba(192,107,58,0.07)",pointerEvents:"none"}}/>
+        <div style={{position:"relative"}}>
+          <div style={{color:"rgba(232,164,64,0.75)",fontSize:11,fontWeight:600,letterSpacing:3,textTransform:"uppercase",marginBottom:14}}>Family Road Trip</div>
+          <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
+            <div style={{fontSize:56,filter:"drop-shadow(0 4px 14px rgba(0,0,0,0.3))",lineHeight:1}}>{trip.emoji}</div>
+            <div>
+              <h1 style={{fontFamily:"'Playfair Display',serif",color:"white",fontSize:"clamp(26px,7vw,38px)",fontWeight:700,lineHeight:1.15,marginBottom:6}}>{trip.name}</h1>
+              <div style={{color:"rgba(255,255,255,0.7)",fontSize:14}}>📍 {trip.destination}</div>
+            </div>
+          </div>
+          <div style={{color:"rgba(255,255,255,0.5)",fontSize:13,marginBottom:18}}>📅 {fDate(trip.startDate)} – {fDate(trip.endDate)}</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontStyle:"italic",color:"rgba(232,164,64,0.85)",fontSize:15,lineHeight:1.6,marginBottom:28,paddingLeft:14,borderLeft:"2px solid rgba(232,164,64,0.3)"}}>"{trip.tagline}"</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            {[["days","Days"],["hours","Hrs"],["minutes","Min"],["seconds","Sec"]].map(([k,l])=><div key={k} style={{background:"rgba(255,255,255,0.08)",borderRadius:14,padding:"12px 6px",textAlign:"center",border:"1px solid rgba(255,255,255,0.11)"}}>
+              <div style={{color:C.amber,fontSize:"clamp(22px,5vw,30px)",fontWeight:700,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{cd[k]??0}</div>
+              <div style={{color:"rgba(255,255,255,0.4)",fontSize:10,marginTop:4,textTransform:"uppercase",letterSpacing:1.5}}>{l}</div>
+            </div>)}
+          </div>
+        </div>
+      </div>
+      <div style={{padding:"20px 20px 0"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
+          {[{l:"Households",v:households.length||"0",i:"🏠"},{l:"Stops",v:trip.stops.length,i:"📍"},{l:"Days",v:Math.max(1,Math.round((new Date(trip.endDate)-new Date(trip.startDate))/86400000)+1),i:"📅"}].map(s=><Card key={s.l} style={{padding:"14px 10px",textAlign:"center"}}>
+            <div style={{fontSize:20,marginBottom:4}}>{s.i}</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.terra}}>{s.v}</div>
+            <div style={{fontSize:11,color:C.muted}}>{s.l}</div>
+          </Card>)}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:9}}>
+          <Btn onClick={()=>setTab("join")}>✋ Add My Family Info</Btn>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+            <Btn variant="outline" onClick={()=>setTab("trip")} style={{width:"auto"}}>🗺️ The Trip</Btn>
+            <Btn variant="outline" onClick={()=>{setTab("lists");setListTab("bucket");}} style={{width:"auto"}}>⭐ Bucket List</Btn>
+          </div>
+        </div>
+        <div style={{marginTop:20,paddingBottom:4,textAlign:"center"}}>
+          {orgMode?<button onClick={()=>setTab("admin")} style={{background:"none",border:"none",color:C.terra,fontSize:13,cursor:"pointer",fontWeight:600}}>⚙️ Organizer Panel →</button>:<button onClick={()=>setShowPin(true)} style={{background:"none",border:"none",color:C.muted,fontSize:12,cursor:"pointer"}}>Organizer access</button>}
+        </div>
+      </div>
+    </div>}
+
+    {/* ── THE TRIP ──────────────────────────────────────────────────────────────── */}
+    {tab==="trip"&&trip&&<div className="fu" style={{padding:"28px 20px"}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>The Trip</div>
+      <div style={{color:C.muted,fontSize:14,marginBottom:22}}>Here's what we have planned</div>
+      <div style={{display:"inline-flex",alignItems:"center",gap:8,background:`${C.amber}18`,border:`1px solid ${C.amber}50`,borderRadius:20,padding:"6px 14px",fontSize:13,color:"#8A6020",fontWeight:500,marginBottom:20}}>✨ {trip.vibe}</div>
+      <Card style={{padding:20,marginBottom:14}}>
+        <div style={{fontWeight:600,fontSize:15,color:C.navy,marginBottom:18}}>🗺️ The Route</div>
+        <div style={{position:"relative"}}>
+          <div style={{position:"absolute",left:23,top:24,bottom:24,width:2,background:`linear-gradient(to bottom,${C.terra},${C.amber})`,borderRadius:1,opacity:0.5}}/>
+          {trip.stops.map((s,i)=>{const isFirst=i===0,isLast=i===trip.stops.length-1;return <div key={s.id} style={{display:"flex",gap:16,marginBottom:isLast?0:28,alignItems:"flex-start"}}>
+            <div style={{flexShrink:0,width:48,height:48,borderRadius:"50%",background:isFirst||isLast?C.terra:C.amber,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,boxShadow:"0 3px 10px rgba(192,107,58,0.22)",zIndex:1,position:"relative"}}>{s.icon}</div>
+            <div style={{flex:1,paddingTop:8}}>
+              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1.5,marginBottom:2}}>{isFirst?"Start":isLast?"Destination":`Stop ${i}`}</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.navy,marginBottom:2}}>{s.name}</div>
+              <div style={{color:C.muted,fontSize:13,lineHeight:1.5}}>{s.note}</div>
+            </div>
+          </div>;})}
+        </div>
+      </Card>
+      {trip.accommodation&&<Card style={{padding:18,marginBottom:14}}><div style={{fontWeight:600,fontSize:15,color:C.navy,marginBottom:8}}>🏠 Where We're Staying</div><div style={{color:C.text,fontSize:14,lineHeight:1.6}}>{trip.accommodation}</div></Card>}
+      {trip.commitments&&<Card style={{padding:18}}><div style={{fontWeight:600,fontSize:15,color:C.navy,marginBottom:8}}>📅 Already Booked</div><div style={{color:C.text,fontSize:14,lineHeight:1.6}}>{trip.commitments}</div></Card>}
+    </div>}
+
+    {/* ── JOIN FORM ─────────────────────────────────────────────────────────────── */}
+    {tab==="join"&&<div className="fu" style={{padding:"24px 20px"}}>
+      {submitted?<div style={{textAlign:"center",padding:"60px 24px",background:C.card,borderRadius:20,border:`1px solid ${C.border}`}} className="pi">
+        <div style={{fontSize:68,marginBottom:16}}>🎉</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,color:C.terra,marginBottom:8}}>You're in!</div>
+        <div style={{color:C.muted,fontSize:14}}>Taking you to the crew list…</div>
+      </div>:<>
+        <div style={{marginBottom:22}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.terra}}>{STEPS[step]}</div>
+            <div style={{fontSize:12,color:C.muted}}>Step {step+1} of {STEPS.length}</div>
+          </div>
+          <div style={{height:5,background:C.border,borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",background:`linear-gradient(to right,${C.terra},${C.amber})`,borderRadius:3,width:`${((step+1)/STEPS.length)*100}%`,transition:"width 0.3s ease"}}/>
+          </div>
+          <div style={{display:"flex",gap:4,marginTop:7}}>{STEPS.map((_,i)=><div key={i} style={{flex:1,height:3,borderRadius:2,background:i<=step?C.terra:C.border,transition:"background 0.25s"}}/>)}</div>
+        </div>
+
+        {step===0&&<div className="fu" style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:C.navy,marginBottom:2}}>Your Household</div>
+          <div style={{color:C.muted,fontSize:14,marginBottom:4}}>Tell us who's joining the trip</div>
+          <Field label="Household name *" value={form.householdName} onChange={v=>upd("householdName",v)} placeholder="e.g. The Johnson Family"/>
+          <Field label="Driving from *" value={form.origin} onChange={v=>upd("origin",v)} placeholder="e.g. Baltimore, MD"/>
+          <Btn onClick={()=>setStep(1)} disabled={!form.householdName.trim()||!form.origin.trim()} style={{marginTop:8}}>Next: Who's Coming →</Btn>
+        </div>}
+
+        {step===1&&<div className="fu" style={{display:"flex",flexDirection:"column",gap:13}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:C.navy,marginBottom:2}}>Who's Coming</div>
+          <div style={{color:C.muted,fontSize:14,marginBottom:4}}>Add every person in your household</div>
+          {form.people.map((p,idx)=>{const isKid=p.type==="kid";return <Card key={p.id}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",background:isKid?"rgba(232,164,64,0.05)":"rgba(26,43,82,0.03)",borderBottom:`1px solid ${C.border}`}}>
+              <span style={{fontSize:17}}>{isKid?"🧒":"👤"}</span>
+              <input value={p.name} onChange={e=>updP(idx,"name",e.target.value)} placeholder={isKid?"Kid's name":"Full name"} style={{flex:1,background:"transparent",border:"none",fontSize:15,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+              {isKid&&<input value={p.age} onChange={e=>updP(idx,"age",e.target.value)} placeholder="Age" type="number" min="0" max="18" style={{width:55,background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",fontSize:13,color:C.text,textAlign:"center",fontFamily:"'DM Sans',sans-serif"}}/>}
+              <span style={{fontSize:11,color:isKid?"#8A6020":C.navyMid,background:isKid?"rgba(232,164,64,0.15)":"rgba(26,43,82,0.08)",padding:"3px 8px",borderRadius:20,flexShrink:0}}>{isKid?"Kid":"Adult"}</span>
+              <button onClick={()=>setForm(f=>({...f,people:f.people.filter((_,i)=>i!==idx)}))} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:18,lineHeight:1,flexShrink:0}}>×</button>
+            </div>
+            {isKid&&<div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Select label="Nap schedule" value={p.napSchedule} onChange={v=>updP(idx,"napSchedule",v)} options={NAP_SCHEDULES}/>
+              <Select label="Car tolerance" value={p.carTolerance} onChange={v=>updP(idx,"carTolerance",v)} options={CAR_TOLERANCE}/>
+            </div>}
+          </Card>;})}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+            <button onClick={()=>setForm(f=>({...f,people:[...f.people,mkPerson("adult")]}))} style={{padding:"11px",borderRadius:12,border:`1.5px dashed ${C.navyMid}`,background:"transparent",color:C.navyMid,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>👤 Add Adult</button>
+            <button onClick={()=>setForm(f=>({...f,people:[...f.people,mkPerson("kid")]}))} style={{padding:"11px",borderRadius:12,border:`1.5px dashed ${C.amber}`,background:"transparent",color:"#8A6020",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>🧒 Add Kid</button>
+          </div>
+          <div style={{display:"flex",gap:9,marginTop:4}}>
+            <Btn variant="ghost" onClick={()=>setStep(0)} style={{flex:"0 0 auto",width:80}}>← Back</Btn>
+            <Btn onClick={()=>setStep(2)} style={{flex:1}}>Next: Food Preferences →</Btn>
+          </div>
+        </div>}
+
+        {step===2&&<div className="fu" style={{display:"flex",flexDirection:"column",gap:15}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:C.navy,marginBottom:2}}>Food Preferences</div>
+          <div style={{color:C.muted,fontSize:14,marginBottom:4}}>Helps us find restaurants everyone will love</div>
+          {form.people.length===0&&<div style={{textAlign:"center",padding:"20px",background:C.cream,borderRadius:14,color:C.muted,fontSize:14}}>No people added — <button onClick={()=>setStep(1)} style={{background:"none",border:"none",color:C.terra,cursor:"pointer",fontSize:14,fontWeight:600}}>go back to add your household</button></div>}
+          {form.people.map((p,idx)=>{const isKid=p.type==="kid";const pool=isKid?KID_PROFILES:FOOD_PROFILES;return <Card key={p.id}>
+            <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>{isKid?"🧒":"👤"}</span>
+              <span style={{fontWeight:600,fontSize:15,color:C.navy}}>{p.name||"Unnamed"}</span>
+              <span style={{fontSize:11,color:C.muted,marginLeft:"auto"}}>{isKid?"Kid":"Adult"}</span>
+            </div>
+            <div style={{padding:"13px 16px"}}>
+              <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:9}}>Food style — pick all that apply</div>
+              <div style={{display:"grid",gridTemplateColumns:isKid?"1fr 1fr 1fr":"1fr 1fr",gap:7,marginBottom:11}}>
+                {pool.map(fp=>{const sel=(p.foodProfiles||[]).includes(fp.id);return <div key={fp.id} onClick={()=>togProf(idx,fp.id)} style={{padding:isKid?"10px 6px":"10px 10px",borderRadius:11,cursor:"pointer",border:`2px solid ${sel?fp.color:C.border}`,background:sel?`${fp.color}12`:C.bg,transition:"all 0.15s",textAlign:isKid?"center":"left",display:"flex",alignItems:"center",gap:isKid?0:8,flexDirection:isKid?"column":"row"}}>
+                  <span style={{fontSize:isKid?22:18,flexShrink:0}}>{fp.icon}</span>
+                  <div><div style={{fontSize:isKid?11:12,fontWeight:600,color:sel?fp.color:C.text,lineHeight:1.2}}>{fp.label}</div>{!isKid&&<div style={{fontSize:10,color:C.muted,lineHeight:1.3,marginTop:1}}>{fp.sub}</div>}</div>
+                </div>;})}
+              </div>
+              <input value={p.allergies||""} onChange={e=>updP(idx,"allergies",e.target.value)} placeholder="Allergies or hard restrictions? (optional)" style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+            </div>
+          </Card>;})}
+          <div style={{display:"flex",gap:9,marginTop:4}}>
+            <Btn variant="ghost" onClick={()=>setStep(1)} style={{flex:"0 0 auto",width:80}}>← Back</Btn>
+            <Btn onClick={()=>setStep(3)} style={{flex:1}}>Next: Interests →</Btn>
+          </div>
+        </div>}
+
+        {step===3&&<div className="fu" style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:C.navy,marginBottom:2}}>Interests</div>
+          <div style={{color:C.muted,fontSize:14,marginBottom:4}}>Pick everything that sounds fun</div>
+          {["Outdoors","Food & Drink","Culture","Pace"].map(group=><div key={group}>
+            <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1.5,marginBottom:8}}>{group}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:14}}>
+              {INTERESTS.filter(x=>x.group===group).map(it=>{const sel=form.interests.includes(it.id);return <div key={it.id} onClick={()=>togInt(it.id)} style={{padding:"11px 12px",borderRadius:12,cursor:"pointer",border:`1.5px solid ${sel?C.terra:C.border}`,background:sel?`${C.terra}10`:C.card,display:"flex",alignItems:"center",gap:10,transition:"all 0.15s"}}>
+                <span style={{fontSize:19,flexShrink:0}}>{it.icon}</span>
+                <span style={{fontSize:13,fontWeight:sel?600:400,color:sel?C.terra:C.text}}>{it.label}</span>
+                {sel&&<div style={{marginLeft:"auto",width:16,height:16,borderRadius:"50%",background:C.terra,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{color:"white",fontSize:10,fontWeight:700}}>✓</span></div>}
+              </div>;})}
+            </div>
+          </div>)}
+          <div style={{display:"flex",gap:9,marginTop:4}}>
+            <Btn variant="ghost" onClick={()=>setStep(2)} style={{flex:"0 0 auto",width:80}}>← Back</Btn>
+            <Btn onClick={()=>setStep(4)} style={{flex:1}}>Next: Contributions →</Btn>
+          </div>
+        </div>}
+
+        {step===4&&<div className="fu" style={{display:"flex",flexDirection:"column",gap:13}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:C.navy,marginBottom:2}}>Contributions</div>
+          <div style={{color:C.muted,fontSize:14,marginBottom:4}}>What are you bringing? What do you need?</div>
+          <Card style={{padding:16}}><div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:8}}>🎒 Items you're bringing</div><Field value={form.toBring} onChange={v=>upd("toBring",v)} placeholder="e.g. Portable cooler, board games" note="Separate multiple items with commas"/></Card>
+          <Card style={{padding:16}}><div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:8}}>🛒 Items you need someone to bring</div><Field value={form.toBuy} onChange={v=>upd("toBuy",v)} placeholder="e.g. Bug spray, sunscreen SPF 50" note="Separate multiple items with commas"/></Card>
+          <Field label="Anything else?" value={form.notes} onChange={v=>upd("notes",v)} placeholder="Car details, arrival time, anything the organizer should know…" multiline/>
+          <div style={{background:"rgba(232,164,64,0.08)",borderRadius:12,padding:"11px 14px",border:`1px solid rgba(232,164,64,0.25)`}}>
+            <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>ℹ️ Your info is visible to all trip participants.</div>
+          </div>
+          <div style={{display:"flex",gap:9,marginTop:4}}>
+            <Btn variant="ghost" onClick={()=>setStep(3)} style={{flex:"0 0 auto",width:80}}>← Back</Btn>
+            <Btn onClick={submitForm} disabled={!form.householdName.trim()} style={{flex:1}}>🎒 Submit — Count Me In!</Btn>
+          </div>
+        </div>}
+      </>}
+    </div>}
+
+    {/* ── CREW ─────────────────────────────────────────────────────────────────── */}
+    {tab==="crew"&&<div className="fu" style={{padding:"28px 20px"}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>Who's Coming</div>
+      <div style={{color:C.muted,fontSize:14,marginBottom:22}}>{households.length===0?"No one signed up yet — be the first!":`${households.length} household${households.length!==1?"s":""} confirmed`}</div>
+      {households.length===0?<div style={{textAlign:"center",padding:"48px 24px",background:C.card,borderRadius:20,border:`2px dashed ${C.border}`}}>
+        <div style={{fontSize:52,marginBottom:14}}>🏕️</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:C.navy,marginBottom:8}}>The crew is forming…</div>
+        <div style={{color:C.muted,fontSize:14,marginBottom:20}}>Be the first to add your household!</div>
+        <Btn onClick={()=>setTab("join")} style={{maxWidth:200,margin:"0 auto"}}>I'm In →</Btn>
+      </div>:<div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {households.map(hh=>{
+          const adults=(hh.people||[]).filter(p=>p.type==="adult");
+          const kids=(hh.people||[]).filter(p=>p.type==="kid");
+          const intChips=(hh.interests||[]).slice(0,5).map(id=>{const it=INTERESTS.find(x=>x.id===id);return it?it.icon:"";}).join(" ");
+          return <div key={hh.id} style={{background:C.card,borderRadius:16,border:`1px solid ${C.border}`,boxShadow:"0 2px 8px rgba(28,22,18,0.04)",overflow:"hidden"}} className="hov-card">
+            <div style={{padding:"15px 18px",display:"flex",gap:13,alignItems:"center",borderBottom:(hh.people||[]).length?`1px solid ${C.border}`:"none"}}>
+              <div style={{flexShrink:0,width:46,height:46,borderRadius:"50%",background:avatarBg(hh.householdName),display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:700,fontSize:16}}>{initials(hh.householdName)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,color:C.navy}}>{hh.householdName}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:5}}>
+                  {hh.origin&&<Chip icon="📍" text={hh.origin}/>}
+                  {intChips&&<Chip icon={intChips} text=""/>}
+                </div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:18,fontWeight:700,color:C.terra}}>{(hh.people||[]).length}</div>
+                <div style={{fontSize:10,color:C.muted}}>people</div>
+              </div>
+            </div>
+            {(hh.people||[]).length>0&&<div style={{padding:"12px 18px",display:"flex",flexDirection:"column",gap:8}}>
+              {(hh.people||[]).map(person=>{const pool=person.type==="kid"?KID_PROFILES:FOOD_PROFILES;const profiles=(person.foodProfiles||[]).map(id=>{const fp=pool.find(x=>x.id===id);return fp?{icon:fp.icon,label:fp.label,color:fp.color}:null;}).filter(Boolean);return <div key={person.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                <div style={{flexShrink:0,width:26,height:26,borderRadius:"50%",background:person.type==="kid"?C.amber:C.navyMid,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,marginTop:1}}>{person.type==="kid"?"🧒":"👤"}</div>
+                <div style={{flex:1}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.text}}>{person.name||"Unnamed"}</span>
+                  {person.age&&<span style={{fontSize:11,color:C.muted}}> · {person.age}yo</span>}
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
+                    {profiles.map(fp=><Chip key={fp.label} icon={fp.icon} text={fp.label} color={fp.color}/>)}
+                    {person.allergies&&<Chip icon="⚠️" text={person.allergies} color="#C0443A"/>}
+                  </div>
+                </div>
+              </div>;})}
+            </div>}
+          </div>;
+        })}
+      </div>}
+      <div style={{marginTop:18}}><Btn variant="outline" onClick={()=>setTab("join")}>+ Add My Household</Btn></div>
+    </div>}
+
+    {/* ── LISTS ────────────────────────────────────────────────────────────────── */}
+    {tab==="lists"&&<div className="fu" style={{padding:"28px 20px"}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>Lists</div>
+      <div style={{color:C.muted,fontSize:14,marginBottom:18}}>Everyone can add · Updated live</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:22}}>
+        {[["bucket","⭐ Bucket"],["tobring","🎒 To Bring"],["tobuy","🛒 To Buy"]].map(([id,label])=><button key={id} onClick={()=>setListTab(id)} style={{padding:"11px 6px",borderRadius:12,border:`1.5px solid ${listTab===id?C.terra:C.border}`,background:listTab===id?C.terra:C.card,color:listTab===id?"white":C.text,fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}>{label}</button>)}
+      </div>
+
+      {listTab==="bucket"&&<>
+        <Card style={{padding:16,marginBottom:20}}>
+          <div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:12}}>⭐ Add a place or experience</div>
+          {!bPlace?<PlacesSearch mapsReady={mapsReady} onSelect={p=>{setBPlace(p);setBStatus("good_option");}}/>:<div className="pi">
+            <div style={{display:"flex",gap:12,alignItems:"flex-start",padding:"12px 14px",background:C.cream,borderRadius:12,marginBottom:14}}>
+              <span style={{fontSize:26,flexShrink:0}}>📍</span>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:15,color:C.navy}}>{bPlace.title}</div>
+                {bPlace.address&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>{bPlace.address}</div>}
+                {bPlace.mapsUrl&&<a href={bPlace.mapsUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:C.terra,marginTop:2,display:"block"}}>Open in Maps ↗</a>}
+              </div>
+              <button onClick={()=>{setBPlace(null);setBStatus("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:18,flexShrink:0}}>×</button>
+            </div>
+            <div style={{fontSize:12,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:9}}>Status</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:12}}>
+              {BUCKET_STATUSES.map(s=>{const sel=bStatus===s.id;return <div key={s.id} onClick={()=>setBStatus(s.id)} style={{padding:"11px 8px",borderRadius:11,cursor:"pointer",textAlign:"center",border:`2px solid ${sel?s.color:C.border}`,background:sel?`${s.color}12`:C.bg,transition:"all 0.15s"}}>
+                <div style={{fontSize:22,marginBottom:3}}>{s.icon}</div>
+                <div style={{fontSize:12,fontWeight:600,color:sel?s.color:C.text}}>{s.label}</div>
+              </div>;})}
+            </div>
+            {bStatus==="locked_in"&&<div style={{marginBottom:12}}><Field label="Date (optional)" value={bDate} onChange={setBDate} type="date"/></div>}
+            <input value={bBy} onChange={e=>setBBy(e.target.value)} placeholder="Your name (optional)" style={{width:"100%",padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif",marginBottom:10}}/>
+            <Btn onClick={addBucketItem} disabled={!bStatus||bCatting}>{bCatting?"🤖 Categorizing…":"✨ Add to Bucket List"}</Btn>
+          </div>}
+        </Card>
+        {bucketList.length===0?<div style={{textAlign:"center",padding:"32px",color:C.muted,fontSize:14}}>No bucket list items yet. Add your first one above!</div>:BUCKET_CATS.map(cat=>{
+          const raw=bucketList.filter(b=>b.category===cat.id);
+          if(!raw.length)return null;
+          const statusOrder={locked_in:0,must_see:1,good_option:2};
+          const items=[...raw].sort((a,b)=>{const sd=(statusOrder[a.status]??9)-(statusOrder[b.status]??9);if(sd!==0)return sd;return(a.done?1:0)-(b.done?1:0);});
+          return <div key={cat.id} style={{marginBottom:22}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+              <span style={{fontSize:18}}>{cat.icon}</span>
+              <span style={{fontWeight:600,fontSize:14,color:C.navy}}>{cat.label}</span>
+              <span style={{fontSize:12,color:C.muted,background:C.cream,borderRadius:20,padding:"2px 8px"}}>{items.length}</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:7}}>
+              {items.map(item=>{const st=BUCKET_STATUSES.find(s=>s.id===item.status);const isLocked=item.status==="locked_in";return <div key={item.id} style={{background:isLocked?`${C.navy}08`:C.card,borderRadius:12,border:`1px solid ${isLocked?`${C.navy}30`:C.border}`,overflow:"hidden",opacity:item.done?0.6:1,transition:"opacity 0.2s"}}>
+                {isLocked&&<div style={{background:C.navy,padding:"5px 14px",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:13}}>🎟️</span><span style={{color:"white",fontSize:12,fontWeight:600}}>Locked In{item.lockedDate?` · ${fDateShort(item.lockedDate)}`:""}</span></div>}
+                <div onClick={()=>toggleBucket(item.id)} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"12px 14px",cursor:"pointer"}} className="hov-row">
+                  <div style={{flexShrink:0,width:22,height:22,marginTop:1,borderRadius:6,border:`2px solid ${item.done?"#4A7C59":C.border}`,background:item.done?"#4A7C59":"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>
+                    {item.done&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:600,color:C.text,textDecoration:item.done?"line-through":"none"}}>{item.title}</div>
+                    {item.address&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{item.address}</div>}
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5,flexWrap:"wrap"}}>
+                      {st&&!isLocked&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:`${st.color}12`,border:`1px solid ${st.color}35`,borderRadius:20,padding:"2px 8px",fontSize:11,color:st.color,fontWeight:500}}>{st.icon} {st.label}</span>}
+                      <span style={{fontSize:11,color:C.muted}}>{item.addedBy} {item.source==="telegram"?"📱":"💻"}</span>
+                    </div>
+                  </div>
+                  {item.mapsUrl&&<a href={item.mapsUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{flexShrink:0,fontSize:18,lineHeight:1,textDecoration:"none",marginTop:1}}>🗺️</a>}
+                </div>
+              </div>;})}
+            </div>
+          </div>;
+        })}
+      </>}
+
+      {listTab==="tobring"&&<>
+        <Card style={{padding:14,marginBottom:16}}>
+          <div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:10}}>Add something you're bringing</div>
+          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+            <input value={newBring.item} onChange={e=>setNewBring(b=>({...b,item:e.target.value}))} placeholder="Item *" style={{padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:14,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+            <input value={newBring.by} onChange={e=>setNewBring(b=>({...b,by:e.target.value}))} placeholder="Your name or household" style={{padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:14,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+            <Btn onClick={addBring} disabled={!newBring.item.trim()}>+ Add Item</Btn>
+          </div>
+        </Card>
+        {toBring.length===0&&<div style={{textAlign:"center",padding:"24px",color:C.muted,fontSize:14}}>Nothing added yet.</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          {toBring.map(item=><div key={item.id} onClick={()=>toggleBring(item.id)} style={{display:"flex",gap:12,alignItems:"center",padding:"13px 14px",background:C.card,borderRadius:12,border:`1px solid ${C.border}`,cursor:"pointer",opacity:item.checked?0.5:1}} className="hov-row">
+            <div style={{flexShrink:0,width:22,height:22,borderRadius:6,border:`2px solid ${item.checked?C.terra:C.border}`,background:item.checked?C.terra:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{item.checked&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:500,textDecoration:item.checked?"line-through":"none",color:C.text}}>{item.item}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1}}>{item.by}</div>
+            </div>
+          </div>)}
+        </div>
+      </>}
+
+      {listTab==="tobuy"&&<>
+        <Card style={{padding:14,marginBottom:16}}>
+          <div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:10}}>Request something we need</div>
+          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+            <input value={newBuy2.item} onChange={e=>setNewBuy2(b=>({...b,item:e.target.value}))} placeholder="Item needed *" style={{padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:14,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+            <input value={newBuy2.by} onChange={e=>setNewBuy2(b=>({...b,by:e.target.value}))} placeholder="Your name or household" style={{padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:14,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+            <Btn onClick={addBuy} disabled={!newBuy2.item.trim()}>+ Request Item</Btn>
+          </div>
+        </Card>
+        {toBuy.length===0&&<div style={{textAlign:"center",padding:"24px",color:C.muted,fontSize:14}}>No requests yet.</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          {toBuy.map(item=><div key={item.id} onClick={()=>toggleBuy(item.id)} style={{display:"flex",gap:12,alignItems:"center",padding:"13px 14px",background:C.card,borderRadius:12,border:`1px solid ${C.border}`,cursor:"pointer",opacity:item.checked?0.5:1}} className="hov-row">
+            <div style={{flexShrink:0,width:22,height:22,borderRadius:6,border:`2px solid ${item.checked?C.terra:C.border}`,background:item.checked?C.terra:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{item.checked&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:500,textDecoration:item.checked?"line-through":"none",color:C.text}}>{item.item}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1}}>requested by {item.by}</div>
+            </div>
+          </div>)}
+        </div>
+      </>}
+    </div>}
+
+    {/* ── ADMIN ────────────────────────────────────────────────────────────────── */}
+    {tab==="admin"&&orgMode&&<div className="fu" style={{padding:"28px 20px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:C.navy}}>Organizer</div>
+        <span style={{background:C.terra,color:"white",fontSize:11,padding:"4px 11px",borderRadius:20,fontWeight:700}}>⚙️ ADMIN</span>
+      </div>
+      <div style={{color:C.muted,fontSize:14,marginBottom:24}}>Full control over this trip portal</div>
+      <Card style={{padding:18,marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{fontWeight:600,fontSize:15,color:C.navy}}>Trip Details</div>
+          <button onClick={()=>{setEditMode(!editMode);setEditTrip({...trip});}} style={{background:"none",border:"none",color:C.terra,fontSize:14,cursor:"pointer",fontWeight:600}}>{editMode?"Cancel":"Edit"}</button>
+        </div>
+        {editMode?<div style={{display:"flex",flexDirection:"column",gap:11}}>
+          <Field label="Trip Name" value={editTrip.name} onChange={v=>setEditTrip(e=>({...e,name:v}))}/>
+          <Field label="Destination" value={editTrip.destination} onChange={v=>setEditTrip(e=>({...e,destination:v}))}/>
+          <Field label="Emoji" value={editTrip.emoji} onChange={v=>setEditTrip(e=>({...e,emoji:v}))}/>
+          <Field label="Tagline" value={editTrip.tagline} onChange={v=>setEditTrip(e=>({...e,tagline:v}))} multiline/>
+          <Field label="Vibe" value={editTrip.vibe} onChange={v=>setEditTrip(e=>({...e,vibe:v}))}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Start Date" value={editTrip.startDate} onChange={v=>setEditTrip(e=>({...e,startDate:v}))} type="date"/>
+            <Field label="End Date" value={editTrip.endDate} onChange={v=>setEditTrip(e=>({...e,endDate:v}))} type="date"/>
+          </div>
+          <Field label="Accommodation" value={editTrip.accommodation||""} onChange={v=>setEditTrip(e=>({...e,accommodation:v}))} multiline/>
+          <Field label="Fixed Commitments" value={editTrip.commitments||""} onChange={v=>setEditTrip(e=>({...e,commitments:v}))} multiline/>
+          <Btn onClick={saveTrip}>Save Changes ✓</Btn>
+        </div>:<div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {[["Trip",trip.name],["Destination",trip.destination],["Dates",`${fDate(trip.startDate)} → ${fDate(trip.endDate)}`],["Vibe",trip.vibe]].map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:14,gap:12}}>
+            <span style={{color:C.muted,flexShrink:0}}>{k}</span>
+            <span style={{fontWeight:500,textAlign:"right",color:C.text}}>{v}</span>
+          </div>)}
+        </div>}
+      </Card>
+      <Card style={{padding:18,marginBottom:12}}>
+        <div style={{fontWeight:600,fontSize:15,color:C.navy,marginBottom:14}}>Submissions ({households.length})</div>
+        {households.length===0?<div style={{color:C.muted,fontSize:14}}>No participants yet.</div>:<div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {households.map(hh=><div key={hh.id} style={{padding:"12px 14px",background:C.bg,borderRadius:12,fontSize:13}}>
+            <div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:4}}>{hh.householdName}<span style={{fontWeight:400,color:C.muted}}> · {hh.origin}</span></div>
+            {(hh.people||[]).map(p=>{const pool=p.type==="kid"?KID_PROFILES:FOOD_PROFILES;const icons=(p.foodProfiles||[]).map(id=>{const fp=pool.find(x=>x.id===id);return fp?fp.icon:"";}).join(" ");return <div key={p.id} style={{color:C.muted,lineHeight:1.7}}>{p.type==="kid"?"🧒":"👤"} <strong style={{color:C.text}}>{p.name||"Unnamed"}</strong>{p.age?` (${p.age})`:""} {icons}{p.allergies?` · ⚠️ ${p.allergies}`:""}</div>;})}
+          </div>)}
+        </div>}
+      </Card>
+      <Card style={{padding:18,marginBottom:12}}>
+        <div style={{fontWeight:600,fontSize:15,color:C.navy,marginBottom:12}}>Quick Stats</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {[{l:"Bucket List",v:bucketList.length,i:"⭐"},{l:"Locked In",v:bucketList.filter(b=>b.status==="locked_in").length,i:"🎟️"},{l:"To Bring",v:toBring.length,i:"🎒"},{l:"To Buy",v:toBuy.length,i:"🛒"}].map(s=><div key={s.l} style={{textAlign:"center",padding:"12px",background:C.bg,borderRadius:10}}>
+            <div style={{fontSize:20,marginBottom:3}}>{s.i}</div>
+            <div style={{fontSize:20,fontWeight:700,color:C.terra}}>{s.v}</div>
+            <div style={{fontSize:11,color:C.muted}}>{s.l}</div>
+          </div>)}
+        </div>
+      </Card>
+      <div style={{display:"flex",flexDirection:"column",gap:9}}>
+        <Btn variant="navy" onClick={exportMd}>📄 Export TRIP.md</Btn>
+        <Btn variant="danger" onClick={resetAll}>🔄 Reset All Data (New Trip)</Btn>
+        <Btn variant="ghost" onClick={()=>{setOrg(false);setTab("hero");}}>Exit Organizer Mode</Btn>
+      </div>
+      <div style={{marginTop:14,padding:"12px 14px",background:"rgba(192,107,58,0.06)",borderRadius:12,border:`1px solid rgba(192,107,58,0.14)`}}>
+        <div style={{fontSize:12,color:C.muted,lineHeight:1.7}}>
+          💡 PIN: <strong>1234</strong> — change <code>ORGANIZER_PIN</code> in the file before sharing.<br/>
+          📊 Data: Google Sheets via Apps Script.<br/>
+          📄 Export TRIP.md → save to Google Drive → Cowork → OpenClaw.
+        </div>
+      </div>
+    </div>}
+
+    {/* BOTTOM NAV */}
+    <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:640,background:C.card,borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-around",alignItems:"center",padding:"8px 0 8px",zIndex:100,boxShadow:"0 -2px 14px rgba(28,22,18,0.07)"}}>
+      {navItems.map(item=><button key={item.id} onClick={()=>setTab(item.id)} className="nav-btn" style={{background:"none",border:"none",display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer",padding:"4px 10px",color:tab===item.id?C.terra:C.muted,borderRadius:10}}>
+        <span style={{fontSize:tab===item.id?22:19,transition:"font-size 0.15s"}}>{item.icon}</span>
+        <span style={{fontSize:9,fontWeight:tab===item.id?700:400,fontFamily:"'DM Sans',sans-serif",letterSpacing:0.3}}>{item.label}</span>
+        {tab===item.id&&<div style={{width:3,height:3,borderRadius:"50%",background:C.terra}}/>}
+      </button>)}
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<TripPortal/>);
+</script>
+</body>
+</html>
