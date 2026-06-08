@@ -167,7 +167,7 @@ function Select({label,value,onChange,options,placeholder="Select…"}){
 function Btn({onClick,children,variant="primary",disabled=false,style={},small=false}){
   const V={primary:{bg:C.terra,color:"white",border:"none"},navy:{bg:C.navy,color:"white",border:"none"},outline:{bg:"transparent",color:C.terra,border:`1.5px solid ${C.terra}`},ghost:{bg:"transparent",color:C.muted,border:`1px solid ${C.border}`},danger:{bg:"transparent",color:C.red,border:`1.5px solid ${C.red}`}};
   const v=V[variant]||V.primary;
-  const disabledStyle=disabled?{background:"#D4C9B8",color:"#A89880",border:"none",cursor:"not-allowed"}:{};
+  const disabledStyle=disabled?{background:"#9E8E7E",color:"#F5EDD8",border:"none",cursor:"not-allowed"}:{};
   return <button onClick={disabled?undefined:onClick}
     style={{...v,...disabledStyle,padding:small?"8px 14px":"13px 20px",borderRadius:12,fontSize:small?13:15,fontWeight:600,fontFamily:"'DM Sans',sans-serif",transition:"all 0.18s",width:"100%",...style}}
     onMouseOver={e=>{if(!disabled){e.currentTarget.style.filter="brightness(1.07)";e.currentTarget.style.transform="translateY(-1px)";}}}
