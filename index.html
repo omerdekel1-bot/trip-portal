@@ -114,18 +114,27 @@ const STEPS = ["Your Household","Who's Coming","Food Preferences","Interests","C
 function mkForm(){return{householdName:"",origin:"",people:[],interests:[],notes:"",toBring:"",toBuy:""};}
 function mkPerson(type){return{id:`${Date.now()}${Math.random()}`,name:"",type,foodProfiles:[],allergies:"",...(type==="kid"?{age:"",napSchedule:"",carTolerance:""}:{})};}
 
-// ─── AI CATEGORIZE ────────────────────────────────────────────────────────────
-async function aiCategorize(title){
-  try{
-    const res=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:20,
-        messages:[{role:"user",content:`Categorize this travel spot into ONE of: restaurants, hikes, lookouts, attractions, cafes, shopping, events, water. Spot: "${title}". Reply with ONLY the category id.`}]})
-    });
-    const data=await res.json();
-    const cat=data.content?.[0]?.text?.trim().toLowerCase().replace(/[^a-z]/g,"");
-    return BUCKET_CATS.find(c=>c.id===cat)||BUCKET_CATS.find(c=>c.id==="attractions");
-  }catch{return BUCKET_CATS.find(c=>c.id==="attractions");}
+// ─── CATEGORIZE FROM PLACES TYPES + KEYWORD FALLBACK ─────────────────────────
+function categorizePlace(types, title){
+  const t=(types||[]).map(x=>x.toLowerCase());
+  const n=(title||"").toLowerCase();
+  if(t.some(x=>["restaurant","food","meal_delivery","meal_takeaway","bar","night_club"].includes(x))) return "restaurants";
+  if(t.some(x=>["cafe","coffee_shop","bakery"].includes(x))) return "cafes";
+  if(t.some(x=>["shopping_mall","store","clothing_store","book_store","department_store","supermarket"].includes(x))) return "shopping";
+  if(t.some(x=>["swimming_pool","beach","lake","river","water_park"].includes(x))) return "water";
+  if(t.some(x=>["tourist_attraction","museum","art_gallery","zoo","aquarium","amusement_park"].includes(x))) return "attractions";
+  if(t.some(x=>["campground","rv_park","hiking_area"].includes(x))) return "hikes";
+  if(t.some(x=>["stadium","performing_arts_theater","movie_theater"].includes(x))) return "events";
+  if(t.some(x=>["natural_feature","park","national_park"].includes(x))) return "lookouts";
+  if(/restaurant|grill|bbq|diner|bistro|kitchen|eatery|steakhouse|sushi|pizza|taco|burger|pub/.test(n)) return "restaurants";
+  if(/coffee|caf|bakery|espresso|roaster|tea/.test(n)) return "cafes";
+  if(/trail|hike|hiking|trek|mountain|peak|summit|appalachian/.test(n)) return "hikes";
+  if(/overlook|lookout|vista|scenic|viewpoint|observation|panorama/.test(n)) return "lookouts";
+  if(/shop|store|market|outlet|mall|boutique|antique|gift/.test(n)) return "shopping";
+  if(/festival|concert|event|fair|show|performance/.test(n)) return "events";
+  if(/beach|lake|river|creek|swim|waterfall|kayak|fishing|water/.test(n)) return "water";
+  if(/cave|cavern|museum|historic|monument|zoo|aquarium|garden|castle|fort|gallery/.test(n)) return "attractions";
+  return "attractions";
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -192,10 +201,10 @@ function PlacesSearch({onSelect,mapsReady}){
     setLoad(true);setOpen(false);setQ("");
     const div=document.createElement("div");
     const svc=new window.google.maps.places.PlacesService(div);
-    svc.getDetails({placeId:pred.place_id,fields:["name","formatted_address","geometry","url"]},(place,status)=>{
+    svc.getDetails({placeId:pred.place_id,fields:["name","formatted_address","geometry","url","types"]},(place,status)=>{
       setLoad(false);
       if(status===window.google.maps.places.PlacesServiceStatus.OK){
-        onSelect({title:place.name,address:place.formatted_address,mapsUrl:place.url,placeId:pred.place_id,lat:place.geometry?.location?.lat(),lng:place.geometry?.location?.lng()});
+        onSelect({title:place.name,address:place.formatted_address,mapsUrl:place.url,placeId:pred.place_id,types:place.types||[],lat:place.geometry?.location?.lat(),lng:place.geometry?.location?.lng()});
       }
     });
   }
@@ -314,8 +323,8 @@ function TripPortal(){
   async function addBucketItem(){
     if(!bPlace||!bStatus)return;
     setBCat(true);
-    const cat=await aiCategorize(bPlace.title);
-    const item={id:Date.now().toString(),...bPlace,category:cat.id,status:bStatus,lockedDate:bStatus==="locked_in"?bDate:"",done:false,addedBy:bBy||"Anonymous",addedAt:new Date().toISOString(),source:"portal"};
+    const catId = categorizePlace(bPlace.types, bPlace.title);
+    const item={id:Date.now().toString(),...bPlace,category:catId,status:bStatus,lockedDate:bStatus==="locked_in"?bDate:"",done:false,addedBy:bBy||"Anonymous",addedAt:new Date().toISOString(),source:"portal"};
     const upd=[...bucketList,item];setBucket(upd);await save("tp4:bucket",upd);
     setBCat(false);setBPlace(null);setBStatus("");setBDate("");setBBy("");
   }
@@ -687,7 +696,7 @@ function TripPortal(){
       </div>
 
       {listTab==="bucket"&&<>
-        <Card style={{padding:16,marginBottom:20}}>
+        <Card style={{padding:16,marginBottom:20,overflow:"visible"}}>
           <div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:12}}>⭐ Add a place or experience</div>
           {!bPlace?<PlacesSearch mapsReady={mapsReady} onSelect={p=>{setBPlace(p);setBStatus("good_option");}}/>:<div className="pi">
             <div style={{display:"flex",gap:12,alignItems:"flex-start",padding:"12px 14px",background:C.cream,borderRadius:12,marginBottom:14}}>
@@ -708,7 +717,7 @@ function TripPortal(){
             </div>
             {bStatus==="locked_in"&&<div style={{marginBottom:12}}><Field label="Date (optional)" value={bDate} onChange={setBDate} type="date"/></div>}
             <input value={bBy} onChange={e=>setBBy(e.target.value)} placeholder="Your name (optional)" style={{width:"100%",padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif",marginBottom:10}}/>
-            <Btn onClick={addBucketItem} disabled={!bStatus||bCatting}>{bCatting?"🤖 Categorizing…":"✨ Add to Bucket List"}</Btn>
+            <Btn onClick={addBucketItem} disabled={!bStatus||bCatting}>{bCatting?"Adding…":"✨ Add to Bucket List"}</Btn>
           </div>}
         </Card>
         {bucketList.length===0?<div style={{textAlign:"center",padding:"32px",color:C.muted,fontSize:14}}>No bucket list items yet. Add your first one above!</div>:BUCKET_CATS.map(cat=>{
