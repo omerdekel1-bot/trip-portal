@@ -57,6 +57,12 @@ const DEFAULT_TRIP = {
   ],
   accommodation:"Blue Ridge Cabin · Sleeps 16 · Full kitchen · Fire pit · Pool",
   commitments:"Luray Caverns — Jul 5 @ 10am · Group dinner — Jul 6 @ 7pm",
+  dailyAccommodation:{
+    "2026-07-04":"Driving day — arriving evening",
+    "2026-07-05":"Blue Ridge Cabin, Front Royal VA",
+    "2026-07-06":"Blue Ridge Cabin, Front Royal VA",
+    "2026-07-07":"Check out — drive home",
+  },
 };
 const FOOD_PROFILES = [
   {id:"vacation",   label:"Vacation Mode",   sub:"No restrictions",          icon:"🎉",color:"#C06B3A"},
@@ -348,8 +354,10 @@ function TripPortal(){
   const [bTime,setBTime]=useState("");
   const [bCatting,setBCat]=useState(false);
   const [editingBucket,setEditingBucket]=useState(null);
-  const [editingHH,setEditingHH]=useState(null);     // id of HH being edited
-  const [editHHData,setEditHHData]=useState(null);   // draft copy // {id, title, status, lockedDate, lockedTime}
+  const [editingHH,setEditingHH]=useState(null);
+  const [editHHData,setEditHHData]=useState(null);
+  const [editingBring,setEditingBring]=useState(null);
+  const [editingBuyItem,setEditingBuyItem]=useState(null);
   const [newBring,setNewBring]=useState({item:"",by:""});
   const [newBuy2,setNewBuy2]=useState({item:"",by:""});
   // Discover
@@ -466,7 +474,11 @@ function TripPortal(){
   const updHHP=(idx,f,v)=>setEditHHData(h=>({...h,people:h.people.map((p,i)=>i===idx?{...p,[f]:v}:p)}));
   const togHHProf=(idx,pid)=>setEditHHData(h=>({...h,people:h.people.map((p,i)=>i===idx?{...p,foodProfiles:(p.foodProfiles||[]).includes(pid)?p.foodProfiles.filter(x=>x!==pid):[...p.foodProfiles,pid]}:p)}));
   async function toggleBring(id){const u=toBring.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBring(u);await save("tp4:tobring",u);}
+  async function deleteBring(id){const u=toBring.filter(i=>i.id!==id);setToBring(u);await save("tp4:tobring",u);}
+  async function saveBringEdit(){if(!editingBring)return;const u=toBring.map(i=>i.id===editingBring.id?{...i,...editingBring}:i);setToBring(u);await save("tp4:tobring",u);setEditingBring(null);}
   async function toggleBuy(id){const u=toBuy.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBuy(u);await save("tp4:tobuy",u);}
+  async function deleteBuyFn(id){const u=toBuy.filter(i=>i.id!==id);setToBuy(u);await save("tp4:tobuy",u);}
+  async function saveBuyEdit(){if(!editingBuyItem)return;const u=toBuy.map(i=>i.id===editingBuyItem.id?{...i,...editingBuyItem}:i);setToBuy(u);await save("tp4:tobuy",u);setEditingBuyItem(null);}
   async function addBring(){
     if(!newBring.item.trim())return;
     const u=[...toBring,{id:Date.now().toString(),item:newBring.item.trim(),by:newBring.by||"Anonymous",checked:false,source:"portal"}];
@@ -546,6 +558,7 @@ function TripPortal(){
       `**✨ Vibe:** ${trip.vibe}`,"",
       `## 🗺️ Route`,...trip.stops.map((s,i)=>`${i+1}. **${s.name}** — ${s.note}`),"",
       `## 🏠 Accommodation`,trip.accommodation||"—","",
+      ...(Object.keys(trip.dailyAccommodation||{}).length?[`### Per Day`,...Object.entries(trip.dailyAccommodation).map(([d,n])=>`- **${fDate(d)}:** ${n}`),""]:[]),
       `## 📅 Fixed Commitments`,trip.commitments||"—","",
       `## 👨‍👩‍👧‍👦 Who's Coming (${households.length} household${households.length!==1?"s":""})`,
       ...(households.length?households.flatMap(hh=>{
@@ -709,7 +722,7 @@ function TripPortal(){
             .sort((a,b)=>(a.lockedTime||"99:99").localeCompare(b.lockedTime||"99:99"));
           return <div key={dateStr} style={{marginBottom:20}}>
             {/* Day header */}
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:dayItems.length>0||trip.dailyAccommodation?.[dateStr]?10:8}}>
               <div style={{width:36,height:36,borderRadius:10,background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <span style={{color:C.amber,fontSize:14,fontWeight:700}}>{idx+1}</span>
               </div>
@@ -718,6 +731,12 @@ function TripPortal(){
                 <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:C.navy}}>{new Date(dateStr+"T12:00:00").toLocaleDateString("en-US",{month:"long",day:"numeric"})}</div>
               </div>
             </div>
+
+            {/* Daily accommodation */}
+            {trip.dailyAccommodation?.[dateStr]&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:`${C.amber}10`,borderRadius:10,border:`1px solid ${C.amber}30`,marginBottom:10}}>
+              <span style={{fontSize:14}}>🏠</span>
+              <span style={{fontSize:13,color:"#7A5A20",fontWeight:500}}>{trip.dailyAccommodation[dateStr]}</span>
+            </div>}
 
             {dayItems.length===0
               ?<div style={{padding:"14px 16px",background:C.card,borderRadius:12,border:`1px dashed ${C.border}`,color:C.muted,fontSize:13,fontStyle:"italic"}}>Nothing locked in yet for this day</div>
@@ -1105,13 +1124,37 @@ function TripPortal(){
         </Card>
         {toBring.length===0&&<div style={{textAlign:"center",padding:"24px",color:C.muted,fontSize:14}}>Nothing added yet.</div>}
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
-          {toBring.map(item=><div key={item.id} onClick={()=>toggleBring(item.id)} style={{display:"flex",gap:12,alignItems:"center",padding:"13px 14px",background:C.card,borderRadius:12,border:`1px solid ${C.border}`,cursor:"pointer",opacity:item.checked?0.5:1}} className="hov-row">
-            <div style={{flexShrink:0,width:22,height:22,borderRadius:6,border:`2px solid ${item.checked?C.terra:C.border}`,background:item.checked?C.terra:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{item.checked&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}</div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:14,fontWeight:500,textDecoration:item.checked?"line-through":"none",color:C.text}}>{item.item}</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:1}}>{item.by}</div>
-            </div>
-          </div>)}
+          {toBring.map(item=>{
+            const isEd=editingBring?.id===item.id;
+            return <div key={item.id} style={{background:C.card,borderRadius:12,border:`1px solid ${isEd?C.terra:C.border}`}}>
+              {isEd?(
+                <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                  <input value={editingBring.item} onChange={e=>setEditingBring(b=>({...b,item:e.target.value}))}
+                    style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:14,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                  <input value={editingBring.by||""} onChange={e=>setEditingBring(b=>({...b,by:e.target.value}))} placeholder="Who's bringing this?"
+                    style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                  <div style={{display:"flex",gap:8}}>
+                    <Btn variant="ghost" onClick={()=>setEditingBring(null)} style={{flex:"0 0 auto",width:80}} small>Cancel</Btn>
+                    <Btn onClick={saveBringEdit} style={{flex:1}} small>Save</Btn>
+                  </div>
+                </div>
+              ):(
+                <div style={{display:"flex",gap:12,alignItems:"center",padding:"13px 14px",opacity:item.checked?0.5:1}}>
+                  <div onClick={()=>toggleBring(item.id)} style={{flexShrink:0,width:22,height:22,borderRadius:6,border:`2px solid ${item.checked?C.terra:C.border}`,background:item.checked?C.terra:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",cursor:"pointer"}}>
+                    {item.checked&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}
+                  </div>
+                  <div style={{flex:1,cursor:"pointer"}} onClick={()=>toggleBring(item.id)}>
+                    <div style={{fontSize:14,fontWeight:500,textDecoration:item.checked?"line-through":"none",color:C.text}}>{item.item}</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:1}}>{item.by}</div>
+                  </div>
+                  <div style={{display:"flex",gap:4,flexShrink:0}}>
+                    <button onClick={()=>setEditingBring({id:item.id,item:item.item,by:item.by||""})} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 4px",color:C.muted}}>✏️</button>
+                    <button onClick={()=>deleteBring(item.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 4px",color:C.red}}>🗑️</button>
+                  </div>
+                </div>
+              )}
+            </div>;
+          })}
         </div>
       </>}
 
@@ -1126,13 +1169,37 @@ function TripPortal(){
         </Card>
         {toBuy.length===0&&<div style={{textAlign:"center",padding:"24px",color:C.muted,fontSize:14}}>No requests yet.</div>}
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
-          {toBuy.map(item=><div key={item.id} onClick={()=>toggleBuy(item.id)} style={{display:"flex",gap:12,alignItems:"center",padding:"13px 14px",background:C.card,borderRadius:12,border:`1px solid ${C.border}`,cursor:"pointer",opacity:item.checked?0.5:1}} className="hov-row">
-            <div style={{flexShrink:0,width:22,height:22,borderRadius:6,border:`2px solid ${item.checked?C.terra:C.border}`,background:item.checked?C.terra:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>{item.checked&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}</div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:14,fontWeight:500,textDecoration:item.checked?"line-through":"none",color:C.text}}>{item.item}</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:1}}>requested by {item.by}</div>
-            </div>
-          </div>)}
+          {toBuy.map(item=>{
+            const isEd=editingBuyItem?.id===item.id;
+            return <div key={item.id} style={{background:C.card,borderRadius:12,border:`1px solid ${isEd?C.terra:C.border}`}}>
+              {isEd?(
+                <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                  <input value={editingBuyItem.item} onChange={e=>setEditingBuyItem(b=>({...b,item:e.target.value}))}
+                    style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:14,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                  <input value={editingBuyItem.by||""} onChange={e=>setEditingBuyItem(b=>({...b,by:e.target.value}))} placeholder="Requested by"
+                    style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                  <div style={{display:"flex",gap:8}}>
+                    <Btn variant="ghost" onClick={()=>setEditingBuyItem(null)} style={{flex:"0 0 auto",width:80}} small>Cancel</Btn>
+                    <Btn onClick={saveBuyEdit} style={{flex:1}} small>Save</Btn>
+                  </div>
+                </div>
+              ):(
+                <div style={{display:"flex",gap:12,alignItems:"center",padding:"13px 14px",opacity:item.checked?0.5:1}}>
+                  <div onClick={()=>toggleBuy(item.id)} style={{flexShrink:0,width:22,height:22,borderRadius:6,border:`2px solid ${item.checked?C.terra:C.border}`,background:item.checked?C.terra:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s",cursor:"pointer"}}>
+                    {item.checked&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}
+                  </div>
+                  <div style={{flex:1,cursor:"pointer"}} onClick={()=>toggleBuy(item.id)}>
+                    <div style={{fontSize:14,fontWeight:500,textDecoration:item.checked?"line-through":"none",color:C.text}}>{item.item}</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:1}}>requested by {item.by}</div>
+                  </div>
+                  <div style={{display:"flex",gap:4,flexShrink:0}}>
+                    <button onClick={()=>setEditingBuyItem({id:item.id,item:item.item,by:item.by||""})} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 4px",color:C.muted}}>✏️</button>
+                    <button onClick={()=>deleteBuyFn(item.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 4px",color:C.red}}>🗑️</button>
+                  </div>
+                </div>
+              )}
+            </div>;
+          })}
         </div>
       </>}
     </div>}
@@ -1289,8 +1356,21 @@ function TripPortal(){
             <Field label="Start Date" value={editTrip.startDate} onChange={v=>setEditTrip(e=>({...e,startDate:v}))} type="date"/>
             <Field label="End Date" value={editTrip.endDate} onChange={v=>setEditTrip(e=>({...e,endDate:v}))} type="date"/>
           </div>
-          <Field label="Accommodation" value={editTrip.accommodation||""} onChange={v=>setEditTrip(e=>({...e,accommodation:v}))} multiline/>
+          <Field label="Accommodation (general)" value={editTrip.accommodation||""} onChange={v=>setEditTrip(e=>({...e,accommodation:v}))} multiline/>
           <Field label="Fixed Commitments" value={editTrip.commitments||""} onChange={v=>setEditTrip(e=>({...e,commitments:v}))} multiline/>
+          <div>
+            <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:8}}>Accommodation per day</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {tripDayOptions(editTrip).map(d=>(
+                <div key={d.value} style={{display:"flex",gap:10,alignItems:"center"}}>
+                  <div style={{flexShrink:0,fontSize:12,color:C.muted,width:110,fontWeight:500}}>{d.label.split(" — ")[0]}</div>
+                  <input value={(editTrip.dailyAccommodation||{})[d.value]||""} onChange={e=>setEditTrip(t=>({...t,dailyAccommodation:{...(t.dailyAccommodation||{}),[d.value]:e.target.value}}))}
+                    placeholder="e.g. Blue Ridge Cabin"
+                    style={{flex:1,padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                </div>
+              ))}
+            </div>
+          </div>
           <Btn onClick={saveTrip}>Save Changes ✓</Btn>
         </div>:<div style={{display:"flex",flexDirection:"column",gap:8}}>
           {[["Trip",trip.name],["Destination",trip.destination],["Dates",`${fDate(trip.startDate)} → ${fDate(trip.endDate)}`],["Vibe",trip.vibe]].map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:14,gap:12}}>
