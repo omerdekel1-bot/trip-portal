@@ -347,7 +347,9 @@ function TripPortal(){
   const [bBy,setBBy]=useState("");
   const [bTime,setBTime]=useState("");
   const [bCatting,setBCat]=useState(false);
-  const [editingBucket,setEditingBucket]=useState(null); // {id, title, status, lockedDate, lockedTime}
+  const [editingBucket,setEditingBucket]=useState(null);
+  const [editingHH,setEditingHH]=useState(null);     // id of HH being edited
+  const [editHHData,setEditHHData]=useState(null);   // draft copy // {id, title, status, lockedDate, lockedTime}
   const [newBring,setNewBring]=useState({item:"",by:""});
   const [newBuy2,setNewBuy2]=useState({item:"",by:""});
   // Discover
@@ -451,6 +453,17 @@ function TripPortal(){
     const upd=bucketList.map(i=>i.id===editingBucket.id?{...i,...editingBucket}:i);
     setBucket(upd);await save("tp4:bucket",upd);setEditingBucket(null);
   }
+  async function deleteHH(id){
+    if(!confirm("Remove this household from the trip?"))return;
+    const upd=households.filter(h=>h.id!==id);setHH(upd);await save("tp4:hh",upd);
+  }
+  async function saveHHEdit(){
+    if(!editHHData)return;
+    const upd=households.map(h=>h.id===editHHData.id?{...h,...editHHData}:h);
+    setHH(upd);await save("tp4:hh",upd);setEditingHH(null);setEditHHData(null);
+  }
+  const updHHP=(idx,f,v)=>setEditHHData(h=>({...h,people:h.people.map((p,i)=>i===idx?{...p,[f]:v}:p)}));
+  const togHHProf=(idx,pid)=>setEditHHData(h=>({...h,people:h.people.map((p,i)=>i===idx?{...p,foodProfiles:(p.foodProfiles||[]).includes(pid)?p.foodProfiles.filter(x=>x!==pid):[...p.foodProfiles,pid]}:p)}));
   async function toggleBring(id){const u=toBring.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBring(u);await save("tp4:tobring",u);}
   async function toggleBuy(id){const u=toBuy.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBuy(u);await save("tp4:tobuy",u);}
   async function addBring(){
@@ -873,47 +886,117 @@ function TripPortal(){
     {tab==="crew"&&<div className="fu" style={{padding:"28px 20px"}}>
       <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>Who's Coming</div>
       <div style={{color:C.muted,fontSize:14,marginBottom:22}}>{households.length===0?"No one signed up yet — be the first!":`${households.length} household${households.length!==1?"s":""} confirmed`}</div>
-      {households.length===0?<div style={{textAlign:"center",padding:"48px 24px",background:C.card,borderRadius:20,border:`2px dashed ${C.border}`}}>
-        <div style={{fontSize:52,marginBottom:14}}>🏕️</div>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:C.navy,marginBottom:8}}>The crew is forming…</div>
-        <div style={{color:C.muted,fontSize:14,marginBottom:20}}>Be the first to add your household!</div>
-        <Btn onClick={()=>setTab("join")} style={{maxWidth:200,margin:"0 auto"}}>I'm In →</Btn>
-      </div>:<div style={{display:"flex",flexDirection:"column",gap:12}}>
-        {households.map(hh=>{
-          const adults=(hh.people||[]).filter(p=>p.type==="adult");
-          const kids=(hh.people||[]).filter(p=>p.type==="kid");
-          const intChips=(hh.interests||[]).slice(0,5).map(id=>{const it=INTERESTS.find(x=>x.id===id);return it?it.icon:"";}).join(" ");
-          return <div key={hh.id} style={{background:C.card,borderRadius:16,border:`1px solid ${C.border}`,boxShadow:"0 2px 8px rgba(28,22,18,0.04)",overflow:"hidden"}} className="hov-card">
-            <div style={{padding:"15px 18px",display:"flex",gap:13,alignItems:"center",borderBottom:(hh.people||[]).length?`1px solid ${C.border}`:"none"}}>
-              <div style={{flexShrink:0,width:46,height:46,borderRadius:"50%",background:avatarBg(hh.householdName),display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:700,fontSize:16}}>{initials(hh.householdName)}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,color:C.navy}}>{hh.householdName}</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:5}}>
-                  {hh.origin&&<Chip icon="📍" text={hh.origin}/>}
-                  {intChips&&<Chip icon={intChips} text=""/>}
+      {households.length===0
+        ?<div style={{textAlign:"center",padding:"48px 24px",background:C.card,borderRadius:20,border:`2px dashed ${C.border}`}}>
+          <div style={{fontSize:52,marginBottom:14}}>🏕️</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:C.navy,marginBottom:8}}>The crew is forming…</div>
+          <div style={{color:C.muted,fontSize:14,marginBottom:20}}>Be the first to add your household!</div>
+          <Btn onClick={()=>setTab("join")} style={{maxWidth:200,margin:"0 auto"}}>I'm In →</Btn>
+        </div>
+        :<div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {households.map(hh=>{
+            const isEditing=editingHH===hh.id;
+            const draft=isEditing?editHHData:hh;
+            const intChips=(hh.interests||[]).slice(0,5).map(id=>{const it=INTERESTS.find(x=>x.id===id);return it?it.icon:"";}).join(" ");
+
+            return <div key={hh.id} style={{background:C.card,borderRadius:16,border:`1px solid ${isEditing?C.terra:C.border}`,boxShadow:"0 2px 8px rgba(28,22,18,0.04)",overflow:"hidden"}} className={isEditing?"":"hov-card"}>
+
+              {/* Card header — always visible */}
+              <div style={{padding:"14px 16px",display:"flex",gap:12,alignItems:"center",borderBottom:`1px solid ${C.border}`,background:isEditing?`${C.terra}06`:"transparent"}}>
+                <div style={{flexShrink:0,width:42,height:42,borderRadius:"50%",background:avatarBg(hh.householdName),display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:700,fontSize:15}}>{initials(hh.householdName)}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:C.navy}}>{hh.householdName}</div>
+                  {!isEditing&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
+                    {hh.origin&&<Chip icon="📍" text={hh.origin}/>}
+                    {intChips&&<Chip icon={intChips} text=""/>}
+                  </div>}
                 </div>
+                {!isEditing&&<div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button onClick={()=>{setEditingHH(hh.id);setEditHHData(JSON.parse(JSON.stringify(hh)));}}
+                    style={{background:"none",border:"none",cursor:"pointer",fontSize:15,padding:"4px 6px",color:C.muted}}>✏️</button>
+                  <button onClick={()=>deleteHH(hh.id)}
+                    style={{background:"none",border:"none",cursor:"pointer",fontSize:15,padding:"4px 6px",color:C.red}}>🗑️</button>
+                </div>}
+                {isEditing&&<button onClick={()=>{setEditingHH(null);setEditHHData(null);}}
+                  style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.muted,flexShrink:0}}>×</button>}
               </div>
-              <div style={{textAlign:"right",flexShrink:0}}>
-                <div style={{fontSize:18,fontWeight:700,color:C.terra}}>{(hh.people||[]).length}</div>
-                <div style={{fontSize:10,color:C.muted}}>people</div>
-              </div>
-            </div>
-            {(hh.people||[]).length>0&&<div style={{padding:"12px 18px",display:"flex",flexDirection:"column",gap:8}}>
-              {(hh.people||[]).map(person=>{const pool=person.type==="kid"?KID_PROFILES:FOOD_PROFILES;const profiles=(person.foodProfiles||[]).map(id=>{const fp=pool.find(x=>x.id===id);return fp?{icon:fp.icon,label:fp.label,color:fp.color}:null;}).filter(Boolean);return <div key={person.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-                <div style={{flexShrink:0,width:26,height:26,borderRadius:"50%",background:person.type==="kid"?C.amber:C.navyMid,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,marginTop:1}}>{person.type==="kid"?"🧒":"👤"}</div>
-                <div style={{flex:1}}>
-                  <span style={{fontSize:13,fontWeight:600,color:C.text}}>{person.name||"Unnamed"}</span>
-                  {person.age&&<span style={{fontSize:11,color:C.muted}}> · {person.age}yo</span>}
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
-                    {profiles.map(fp=><Chip key={fp.label} icon={fp.icon} text={fp.label} color={fp.color}/>)}
-                    {person.allergies&&<Chip icon="⚠️" text={person.allergies} color="#C0443A"/>}
-                  </div>
+
+              {/* View mode */}
+              {!isEditing&&(hh.people||[]).length>0&&<div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
+                {(hh.people||[]).map(person=>{
+                  const pool=person.type==="kid"?KID_PROFILES:FOOD_PROFILES;
+                  const profiles=(person.foodProfiles||[]).map(id=>{const fp=pool.find(x=>x.id===id);return fp?{icon:fp.icon,label:fp.label,color:fp.color}:null;}).filter(Boolean);
+                  return <div key={person.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <div style={{flexShrink:0,width:26,height:26,borderRadius:"50%",background:person.type==="kid"?C.amber:C.navyMid,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,marginTop:1}}>{person.type==="kid"?"🧒":"👤"}</div>
+                    <div style={{flex:1}}>
+                      <span style={{fontSize:13,fontWeight:600,color:C.text}}>{person.name||"Unnamed"}</span>
+                      {person.age&&<span style={{fontSize:11,color:C.muted}}> · {person.age}yo</span>}
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
+                        {profiles.map(fp=><Chip key={fp.label} icon={fp.icon} text={fp.label} color={fp.color}/>)}
+                        {person.allergies&&<Chip icon="⚠️" text={person.allergies} color="#C0443A"/>}
+                      </div>
+                    </div>
+                  </div>;
+                })}
+              </div>}
+
+              {/* Edit mode */}
+              {isEditing&&draft&&<div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:12}}>
+                {/* HH basics */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <Field label="Household name" value={draft.householdName||""} onChange={v=>setEditHHData(h=>({...h,householdName:v}))}/>
+                  <Field label="Driving from" value={draft.origin||""} onChange={v=>setEditHHData(h=>({...h,origin:v}))}/>
                 </div>
-              </div>;})}
-            </div>}
-          </div>;
-        })}
-      </div>}
+
+                {/* People */}
+                <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:1}}>People</div>
+                {(draft.people||[]).map((p,idx)=>{
+                  const isKid=p.type==="kid";
+                  const pool=isKid?KID_PROFILES:FOOD_PROFILES;
+                  return <div key={p.id||idx} style={{background:C.bg,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:isKid?"rgba(232,164,64,0.06)":"rgba(26,43,82,0.03)",borderBottom:`1px solid ${C.border}`}}>
+                      <span style={{fontSize:15}}>{isKid?"🧒":"👤"}</span>
+                      <input value={p.name||""} onChange={e=>updHHP(idx,"name",e.target.value)} placeholder={isKid?"Kid's name":"Name"}
+                        style={{flex:1,background:"transparent",border:"none",fontSize:14,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                      {isKid&&<input value={p.age||""} onChange={e=>updHHP(idx,"age",e.target.value)} placeholder="Age" type="number" min="0" max="18"
+                        style={{width:50,background:"transparent",border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 7px",fontSize:12,textAlign:"center",fontFamily:"'DM Sans',sans-serif"}}/>}
+                      <span style={{fontSize:10,color:isKid?"#8A6020":C.navyMid,background:isKid?"rgba(232,164,64,0.15)":"rgba(26,43,82,0.08)",padding:"2px 7px",borderRadius:20}}>{isKid?"Kid":"Adult"}</span>
+                      <button onClick={()=>setEditHHData(h=>({...h,people:h.people.filter((_,i)=>i!==idx)}))}
+                        style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,flexShrink:0}}>×</button>
+                    </div>
+                    <div style={{padding:"10px 12px"}}>
+                      <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:7}}>Food style</div>
+                      <div style={{display:"grid",gridTemplateColumns:isKid?"1fr 1fr 1fr":"1fr 1fr",gap:6,marginBottom:8}}>
+                        {pool.map(fp=>{const sel=(p.foodProfiles||[]).includes(fp.id);return <div key={fp.id} onClick={()=>togHHProf(idx,fp.id)}
+                          style={{padding:isKid?"8px 4px":"8px 8px",borderRadius:9,cursor:"pointer",border:`2px solid ${sel?fp.color:C.border}`,background:sel?`${fp.color}12`:C.card,transition:"all 0.12s",textAlign:isKid?"center":"left",display:"flex",alignItems:"center",gap:isKid?0:7,flexDirection:isKid?"column":"row"}}>
+                          <span style={{fontSize:isKid?18:15,flexShrink:0}}>{fp.icon}</span>
+                          <div style={{fontSize:isKid?10:11,fontWeight:600,color:sel?fp.color:C.text,lineHeight:1.2}}>{fp.label}</div>
+                        </div>;})}
+                      </div>
+                      <input value={p.allergies||""} onChange={e=>updHHP(idx,"allergies",e.target.value)} placeholder="Allergies (optional)"
+                        style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.card,fontSize:12,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                    </div>
+                  </div>;
+                })}
+
+                {/* Add person */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <button onClick={()=>setEditHHData(h=>({...h,people:[...(h.people||[]),mkPerson("adult")]}))}
+                    style={{padding:"9px",borderRadius:10,border:`1.5px dashed ${C.navyMid}`,background:"transparent",color:C.navyMid,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>👤 Add Adult</button>
+                  <button onClick={()=>setEditHHData(h=>({...h,people:[...(h.people||[]),mkPerson("kid")]}))}
+                    style={{padding:"9px",borderRadius:10,border:`1.5px dashed ${C.amber}`,background:"transparent",color:"#8A6020",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>🧒 Add Kid</button>
+                </div>
+
+                {/* Save/cancel */}
+                <div style={{display:"flex",gap:8}}>
+                  <Btn variant="ghost" onClick={()=>{setEditingHH(null);setEditHHData(null);}} style={{flex:"0 0 auto",width:90}} small>Cancel</Btn>
+                  <Btn onClick={saveHHEdit} style={{flex:1}} small>Save Changes ✓</Btn>
+                </div>
+              </div>}
+            </div>;
+          })}
+        </div>
+      }
       <div style={{marginTop:18}}><Btn variant="outline" onClick={()=>setTab("join")}>+ Add My Household</Btn></div>
     </div>}
 
