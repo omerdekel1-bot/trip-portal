@@ -354,6 +354,7 @@ function TripPortal(){
   const [newBuy2,setNewBuy2]=useState({item:"",by:""});
   // Discover
   const [dMode,setDMode]=useState("group");
+  const [dView,setDView]=useState("search"); // "search" | "recommend"
   const [dCat,setDCat]=useState(null);
   const [dResults,setDResults]=useState([]);
   const [dLoading,setDLoading]=useState(false);
@@ -1009,39 +1010,10 @@ function TripPortal(){
       </div>
 
       {listTab==="bucket"&&<>
-        <Card style={{padding:16,marginBottom:20,overflow:"visible"}}>
-          <div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:12}}>⭐ Add a place or experience</div>
-          {!bPlace?<PlacesSearch mapsReady={mapsReady} onSelect={p=>{setBPlace(p);setBStatus("good_option");}}/>:<div className="pi">
-            <div style={{display:"flex",gap:12,alignItems:"flex-start",padding:"12px 14px",background:C.cream,borderRadius:12,marginBottom:14}}>
-              <span style={{fontSize:26,flexShrink:0}}>📍</span>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:600,fontSize:15,color:C.navy}}>{bPlace.title}</div>
-                {bPlace.address&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>{bPlace.address}</div>}
-                {bPlace.mapsUrl&&<a href={bPlace.mapsUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:C.terra,marginTop:2,display:"block"}}>Open in Maps ↗</a>}
-              </div>
-              <button onClick={()=>{setBPlace(null);setBStatus("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:18,flexShrink:0}}>×</button>
-            </div>
-            <div style={{fontSize:12,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:9}}>Status</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:12}}>
-              {BUCKET_STATUSES.map(s=>{const sel=bStatus===s.id;return <div key={s.id} onClick={()=>setBStatus(s.id)} style={{padding:"11px 8px",borderRadius:11,cursor:"pointer",textAlign:"center",border:`2px solid ${sel?s.color:C.border}`,background:sel?`${s.color}12`:C.bg,transition:"all 0.15s"}}>
-                <div style={{fontSize:22,marginBottom:3}}>{s.icon}</div>
-                <div style={{fontSize:12,fontWeight:600,color:sel?s.color:C.text}}>{s.label}</div>
-              </div>;})}
-            </div>
-            {bStatus==="locked_in"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-              <div>
-                <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:5}}>Day</div>
-                <select value={bDate} onChange={e=>setBDate(e.target.value)} style={{width:"100%",padding:"12px 14px",borderRadius:11,border:`1.5px solid ${C.border}`,background:C.bg,fontSize:14,color:bDate?C.text:C.muted,fontFamily:"'DM Sans',sans-serif",appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238A7A6A' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 14px center"}}>
-                  <option value="">Which day?</option>
-                  {tripDayOptions(trip).map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
-                </select>
-              </div>
-              <Field label="Time (optional)" value={bTime} onChange={setBTime} placeholder="e.g. 10:00 AM"/>
-            </div>}
-            <input value={bBy} onChange={e=>setBBy(e.target.value)} placeholder="Your name (optional)" style={{width:"100%",padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif",marginBottom:10}}/>
-            <Btn onClick={addBucketItem} disabled={!bStatus||bCatting}>{bCatting?"Adding…":"✨ Add to Bucket List"}</Btn>
-          </div>}
-        </Card>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+          <div style={{fontSize:13,color:C.muted}}>Tap ✏️ to edit · 🗑️ to remove · ✓ to mark done</div>
+          <button onClick={()=>setTab("discover")} style={{background:"none",border:`1px solid ${C.terra}`,borderRadius:20,padding:"5px 12px",color:C.terra,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap"}}>+ Add via Discover</button>
+        </div>
         {bucketList.length===0?<div style={{textAlign:"center",padding:"32px",color:C.muted,fontSize:14}}>No bucket list items yet. Add your first one above!</div>:BUCKET_CATS.map(cat=>{
           const raw=bucketList.filter(b=>b.category===cat.id);
           if(!raw.length)return null;
@@ -1170,98 +1142,128 @@ function TripPortal(){
       const allPeople=households.flatMap(hh=>(hh.people||[]).map(p=>({...p,hhName:hh.householdName})));
       const addedIds=new Set(bucketList.map(b=>b.placeId).filter(Boolean));
       const selectedPeople=allPeople.filter(p=>dMembers.includes(p.id));
-      const contextLabel=memberContextLabel(selectedPeople);
+      const ctxLabel=memberContextLabel(selectedPeople);
 
       return <div className="fu" style={{padding:"28px 20px"}}>
         <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>Discover</div>
         <div style={{color:C.muted,fontSize:14,marginBottom:20}}>Find things to do near {trip?.destination||"your destination"}</div>
 
-        {/* Mode toggle */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
-          {[["group","👥 For Everyone"],["personal","🎯 For Specific Members"]].map(([id,label])=>(
-            <button key={id} onClick={()=>{setDMode(id);setDResults([]);setDCat(null);}}
-              style={{padding:"11px",borderRadius:12,border:`1.5px solid ${dMode===id?C.terra:C.border}`,background:dMode===id?`${C.terra}10`:C.card,color:dMode===id?C.terra:C.text,fontSize:13,fontWeight:dMode===id?600:400,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}>
+        {/* Top toggle: Search vs Recommendations */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:22}}>
+          {[["search","🔍 Search a Place"],["recommend","💡 Get Recommendations"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setDView(id)}
+              style={{padding:"12px",borderRadius:12,border:`1.5px solid ${dView===id?C.terra:C.border}`,background:dView===id?C.terra:C.card,color:dView===id?"white":C.text,fontSize:13,fontWeight:dView===id?600:400,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}>
               {label}
             </button>
           ))}
         </div>
 
-        {/* Personal mode — member picker */}
-        {dMode==="personal"&&<div style={{marginBottom:20}}>
-          <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:8}}>Who are you planning for?</div>
-          {allPeople.length===0
-            ?<div style={{padding:"12px 14px",background:C.cream,borderRadius:12,fontSize:13,color:C.muted}}>No household submissions yet — ask your crew to fill in the Join form first</div>
-            :<div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-              {allPeople.map(p=>{
-                const sel=dMembers.includes(p.id);
-                return <button key={p.id} onClick={()=>setDMembers(prev=>sel?prev.filter(x=>x!==p.id):[...prev,p.id])}
+        {/* ── SEARCH MODE ── */}
+        {dView==="search"&&<>
+          <div style={{color:C.muted,fontSize:13,marginBottom:14}}>Search Google Maps and add directly to your bucket list</div>
+          {!bPlace
+            ?<PlacesSearch mapsReady={mapsReady} onSelect={p=>{setBPlace(p);setBStatus("good_option");}}/>
+            :<div className="pi">
+              <div style={{display:"flex",gap:12,alignItems:"flex-start",padding:"14px",background:C.cream,borderRadius:14,marginBottom:16,border:`1px solid ${C.border}`}}>
+                <span style={{fontSize:28,flexShrink:0}}>📍</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600,fontSize:16,color:C.navy}}>{bPlace.title}</div>
+                  {bPlace.address&&<div style={{fontSize:13,color:C.muted,marginTop:3}}>{bPlace.address}</div>}
+                  {bPlace.mapsUrl&&<a href={bPlace.mapsUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:C.terra,marginTop:4,display:"block"}}>Open in Maps ↗</a>}
+                </div>
+                <button onClick={()=>{setBPlace(null);setBStatus("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:20,flexShrink:0,lineHeight:1}}>×</button>
+              </div>
+              <div style={{fontSize:12,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:9}}>Status</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                {BUCKET_STATUSES.map(s=>{const sel=bStatus===s.id;return <div key={s.id} onClick={()=>setBStatus(s.id)} style={{padding:"12px 8px",borderRadius:12,cursor:"pointer",textAlign:"center",border:`2px solid ${sel?s.color:C.border}`,background:sel?`${s.color}12`:C.bg,transition:"all 0.15s"}}>
+                  <div style={{fontSize:24,marginBottom:4}}>{s.icon}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:sel?s.color:C.text}}>{s.label}</div>
+                </div>;})}
+              </div>
+              {bStatus==="locked_in"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:5}}>Day</div>
+                  <select value={bDate} onChange={e=>setBDate(e.target.value)} style={{width:"100%",padding:"12px 14px",borderRadius:11,border:`1.5px solid ${C.border}`,background:C.bg,fontSize:14,color:bDate?C.text:C.muted,fontFamily:"'DM Sans',sans-serif",appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238A7A6A' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 14px center"}}>
+                    <option value="">Which day?</option>
+                    {tripDayOptions(trip).map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
+                  </select>
+                </div>
+                <Field label="Time (optional)" value={bTime} onChange={setBTime} placeholder="e.g. 10:00 AM"/>
+              </div>}
+              <input value={bBy} onChange={e=>setBBy(e.target.value)} placeholder="Your name (optional)"
+                style={{width:"100%",padding:"10px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif",marginBottom:12}}/>
+              <Btn onClick={addBucketItem} disabled={!bStatus||bCatting}>{bCatting?"Adding…":"✨ Add to Bucket List"}</Btn>
+            </div>
+          }
+        </>}
+
+        {/* ── RECOMMENDATIONS MODE ── */}
+        {dView==="recommend"&&<>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
+            {[["group","👥 For Everyone"],["personal","🎯 For Specific Members"]].map(([id,label])=>(
+              <button key={id} onClick={()=>{setDMode(id);setDResults([]);setDCat(null);}}
+                style={{padding:"11px",borderRadius:12,border:`1.5px solid ${dMode===id?C.terra:C.border}`,background:dMode===id?`${C.terra}10`:C.card,color:dMode===id?C.terra:C.text,fontSize:13,fontWeight:dMode===id?600:400,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {dMode==="personal"&&<div style={{marginBottom:20}}>
+            <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:8}}>Who are you planning for?</div>
+            {allPeople.length===0
+              ?<div style={{padding:"12px 14px",background:C.cream,borderRadius:12,fontSize:13,color:C.muted}}>No household submissions yet — ask your crew to fill in the Join form first</div>
+              :<div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {allPeople.map(p=>{const sel=dMembers.includes(p.id);return <button key={p.id} onClick={()=>setDMembers(prev=>sel?prev.filter(x=>x!==p.id):[...prev,p.id])}
                   style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${sel?C.terra:C.border}`,background:sel?`${C.terra}12`:C.card,color:sel?C.terra:C.text,fontSize:13,fontWeight:sel?600:400,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:6}}>
                   <span>{p.type==="kid"?"🧒":"👤"}</span>
                   <span>{p.name||"Unnamed"}{p.type==="kid"&&p.age?` (${p.age}yo)`:""}</span>
                   <span style={{fontSize:10,color:C.muted}}>{p.hhName}</span>
-                </button>;
-              })}
-            </div>
-          }
-          {contextLabel&&<div style={{marginTop:10,padding:"8px 14px",background:`${C.amber}12`,border:`1px solid ${C.amber}40`,borderRadius:10,fontSize:12,color:"#7A5A20"}}>
-            🎯 Searching for: {contextLabel}
+                </button>;})}
+              </div>
+            }
+            {ctxLabel&&<div style={{marginTop:10,padding:"8px 14px",background:`${C.amber}12`,border:`1px solid ${C.amber}40`,borderRadius:10,fontSize:12,color:"#7A5A20"}}>🎯 Searching for: {ctxLabel}</div>}
           </div>}
-        </div>}
-
-        {/* Category chips */}
-        <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:10}}>What are you looking for?</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:7,marginBottom:22}}>
-          {DISCOVER_CATS.map(cat=>{
-            const sel=dCat===cat.id;
-            return <button key={cat.id}
-              onClick={()=>discoverSearch(cat.id, dMode==="personal"?selectedPeople:[])}
+          <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:10}}>What are you looking for?</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:7,marginBottom:22}}>
+            {DISCOVER_CATS.map(cat=>{const sel=dCat===cat.id;return <button key={cat.id}
+              onClick={()=>discoverSearch(cat.id,dMode==="personal"?selectedPeople:[])}
               style={{padding:"12px 6px",borderRadius:12,border:`1.5px solid ${sel?C.terra:C.border}`,background:sel?C.terra:C.card,color:sel?"white":C.text,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",textAlign:"center",transition:"all 0.2s"}}>
               <div style={{fontSize:20,marginBottom:3}}>{cat.icon}</div>
               <div style={{fontSize:11,fontWeight:sel?600:400}}>{cat.label}</div>
-            </button>;
-          })}
-        </div>
-
-        {/* Results */}
-        {dLoading&&<div style={{textAlign:"center",padding:"40px 20px",color:C.muted}}>
-          <div style={{fontSize:32,marginBottom:10}}>🔍</div>
-          <div style={{fontSize:14}}>Searching near {trip?.destination}…</div>
-        </div>}
-
-        {!dLoading&&dResults.length===0&&dCat&&<div style={{textAlign:"center",padding:"32px 20px",color:C.muted,fontSize:14}}>
-          No results found. Try a different category.
-        </div>}
-
-        {!dLoading&&dResults.length===0&&!dCat&&<div style={{textAlign:"center",padding:"32px 20px",color:C.muted,fontSize:14}}>
-          Tap a category above to see suggestions
-        </div>}
-
-        {!dLoading&&dResults.length>0&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
-          <div style={{fontSize:12,color:C.muted,marginBottom:4}}>{dResults.length} results near {trip?.destination}</div>
-          {dResults.map(place=>{
-            const alreadyAdded=addedIds.has(place.place_id);
-            const catId=categorizePlace(place.types||[],place.name);
-            const cat=BUCKET_CATS.find(c=>c.id===catId);
-            return <div key={place.place_id} style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,padding:"14px 16px",display:"flex",gap:12,alignItems:"flex-start",boxShadow:"0 2px 8px rgba(28,22,18,0.04)"}}>
-              <div style={{fontSize:24,flexShrink:0,marginTop:2}}>{cat?.icon||"📍"}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:3}}>{place.name}</div>
-                {(place.vicinity||place.formatted_address)&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{place.vicinity||place.formatted_address}</div>}
-                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  {place.rating&&<span style={{fontSize:12,color:"#8A6020",fontWeight:500}}>⭐ {place.rating}</span>}
-                  {cat&&<span style={{fontSize:11,color:C.muted,background:C.cream,padding:"2px 8px",borderRadius:20}}>{cat.icon} {cat.label}</span>}
+            </button>;})}
+          </div>
+          {dLoading&&<div style={{textAlign:"center",padding:"40px 20px",color:C.muted}}>
+            <div style={{fontSize:32,marginBottom:10}}>🔍</div>
+            <div style={{fontSize:14}}>Searching near {trip?.destination}…</div>
+          </div>}
+          {!dLoading&&dResults.length===0&&dCat&&<div style={{textAlign:"center",padding:"32px 20px",color:C.muted,fontSize:14}}>No results found. Try a different category.</div>}
+          {!dLoading&&dResults.length===0&&!dCat&&<div style={{textAlign:"center",padding:"32px 20px",color:C.muted,fontSize:14}}>Tap a category above to see suggestions</div>}
+          {!dLoading&&dResults.length>0&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:4}}>{dResults.length} results near {trip?.destination}</div>
+            {dResults.map(place=>{
+              const alreadyAdded=addedIds.has(place.place_id);
+              const catId=categorizePlace(place.types||[],place.name);
+              const cat=BUCKET_CATS.find(c=>c.id===catId);
+              return <div key={place.place_id} style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,padding:"14px 16px",display:"flex",gap:12,alignItems:"flex-start",boxShadow:"0 2px 8px rgba(28,22,18,0.04)"}}>
+                <div style={{fontSize:24,flexShrink:0,marginTop:2}}>{cat?.icon||"📍"}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:600,fontSize:14,color:C.text,marginBottom:3}}>{place.name}</div>
+                  {(place.vicinity||place.formatted_address)&&<div style={{fontSize:12,color:C.muted,marginBottom:4}}>{place.vicinity||place.formatted_address}</div>}
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    {place.rating&&<span style={{fontSize:12,color:"#8A6020",fontWeight:500}}>⭐ {place.rating}</span>}
+                    {cat&&<span style={{fontSize:11,color:C.muted,background:C.cream,padding:"2px 8px",borderRadius:20}}>{cat.icon} {cat.label}</span>}
+                  </div>
                 </div>
-              </div>
-              <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
-                <button onClick={()=>!alreadyAdded&&addDiscoverItem(place)}
-                  style={{padding:"7px 12px",borderRadius:10,border:"none",background:alreadyAdded?"#E0F0E8":"#C06B3A",color:"white",fontSize:12,fontWeight:600,cursor:alreadyAdded?"default":"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap"}}>
-                  {alreadyAdded?"✓ Added":"+ Add"}
-                </button>
-                <a href={`https://www.google.com/maps/place/?q=place_id:${place.place_id}`} target="_blank" rel="noopener noreferrer" style={{fontSize:16,textDecoration:"none"}}>🗺️</a>
-              </div>
-            </div>;
-          })}
-        </div>}
+                <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+                  <button onClick={()=>!alreadyAdded&&addDiscoverItem(place)}
+                    style={{padding:"7px 12px",borderRadius:10,border:"none",background:alreadyAdded?"#4A7C59":"#C06B3A",color:"white",fontSize:12,fontWeight:600,cursor:alreadyAdded?"default":"pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap"}}>
+                    {alreadyAdded?"✓ Added":"+ Add"}
+                  </button>
+                  <a href={`https://www.google.com/maps/place/?q=place_id:${place.place_id}`} target="_blank" rel="noopener noreferrer" style={{fontSize:16,textDecoration:"none"}}>🗺️</a>
+                </div>
+              </div>;
+            })}
+          </div>}
+        </>}
       </div>;
     })()}
 
