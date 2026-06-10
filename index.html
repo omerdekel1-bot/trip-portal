@@ -46,6 +46,7 @@ const C = {
 // ─── DATA ─────────────────────────────────────────────────────────────────────
 const DEFAULT_TRIP = {
   name:"Blue Ridge Summer", destination:"Shenandoah Valley, VA",
+  subtitle:"Family Road Trip",
   emoji:"🏔️", startDate:"2026-07-04", endDate:"2026-07-07",
   tagline:"Slow mornings, mountain air, and the whole family together.",
   vibe:"Relaxed outdoor adventure",
@@ -639,7 +640,7 @@ function TripPortal(){
         <div style={{position:"absolute",top:-60,right:-40,width:240,height:240,borderRadius:"50%",background:"rgba(232,164,64,0.07)",pointerEvents:"none"}}/>
         <div style={{position:"absolute",bottom:-80,left:-30,width:200,height:200,borderRadius:"50%",background:"rgba(192,107,58,0.07)",pointerEvents:"none"}}/>
         <div style={{position:"relative"}}>
-          <div style={{color:"rgba(232,164,64,0.75)",fontSize:11,fontWeight:600,letterSpacing:3,textTransform:"uppercase",marginBottom:14}}>Family Road Trip</div>
+          <div style={{color:"rgba(232,164,64,0.75)",fontSize:11,fontWeight:600,letterSpacing:3,textTransform:"uppercase",marginBottom:14}}>{trip.subtitle||"Family Road Trip"}</div>
           <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
             <div style={{fontSize:56,filter:"drop-shadow(0 4px 14px rgba(0,0,0,0.3))",lineHeight:1}}>{trip.emoji}</div>
             <div>
@@ -659,7 +660,9 @@ function TripPortal(){
       </div>
       <div style={{padding:"20px 20px 0"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
-          {[{l:"Households",v:households.length||"0",i:"🏠"},{l:"Stops",v:trip.stops.length,i:"📍"},{l:"Days",v:Math.max(1,Math.round((new Date(trip.endDate)-new Date(trip.startDate))/86400000)+1),i:"📅"}].map(s=><Card key={s.l} style={{padding:"14px 10px",textAlign:"center"}}>
+          {[{l:"Households",v:households.length||"0",i:"🏠"},
+            {l:"Planned",v:bucketList.filter(b=>b.status==="locked_in").length||"0",i:"🎯"},
+            {l:"Days",v:Math.max(1,Math.round((new Date(trip.endDate)-new Date(trip.startDate))/86400000)+1),i:"📅"}].map(s=><Card key={s.l} style={{padding:"14px 10px",textAlign:"center"}}>
             <div style={{fontSize:20,marginBottom:4}}>{s.i}</div>
             <div style={{fontSize:22,fontWeight:700,color:C.terra}}>{s.v}</div>
             <div style={{fontSize:11,color:C.muted}}>{s.l}</div>
@@ -1348,6 +1351,7 @@ function TripPortal(){
         </div>
         {editMode?<div style={{display:"flex",flexDirection:"column",gap:11}}>
           <Field label="Trip Name" value={editTrip.name} onChange={v=>setEditTrip(e=>({...e,name:v}))}/>
+          <Field label="Subtitle" value={editTrip.subtitle||""} onChange={v=>setEditTrip(e=>({...e,subtitle:v}))} placeholder="e.g. Family Road Trip"/>
           <Field label="Destination" value={editTrip.destination} onChange={v=>setEditTrip(e=>({...e,destination:v}))}/>
           <Field label="Emoji" value={editTrip.emoji} onChange={v=>setEditTrip(e=>({...e,emoji:v}))}/>
           <Field label="Tagline" value={editTrip.tagline} onChange={v=>setEditTrip(e=>({...e,tagline:v}))} multiline/>
