@@ -401,11 +401,11 @@ function TripPortal(){
         return JSON.parse(data.value);
       }catch{return fallback;}
     };
-    setTrip(await load("tp5:config",DEFAULT_TRIP));
-    setHH(await load("tp5:hh",[]));
-    setBucket(await load("tp5:bucket",[]));
-    setToBring(await load("tp5:tobring",[]));
-    setToBuy(await load("tp5:tobuy",[]));
+    setTrip(await load("tp4:config",DEFAULT_TRIP));
+    setHH(await load("tp4:hh",[]));
+    setBucket(await load("tp4:bucket",[]));
+    setToBring(await load("tp4:tobring",[]));
+    setToBuy(await load("tp4:tobuy",[]));
     setLoading(false);
   }
   function showToast(msg,ok=true){setToast({msg,ok});setTimeout(()=>setToast(null),3500);}
@@ -426,14 +426,14 @@ function TripPortal(){
     if(form.toBring.trim()){
       let upd=[...toBring];
       form.toBring.split(",").map(s=>s.trim()).filter(Boolean).forEach(item=>{upd=[...upd,{id:Date.now().toString()+Math.random(),item,by:form.householdName,checked:false,source:"portal"}];});
-      setToBring(upd);await save("tp5:tobring",upd);
+      setToBring(upd);await save("tp4:tobring",upd);
     }
     if(form.toBuy.trim()){
       let upd=[...toBuy];
       form.toBuy.split(",").map(s=>s.trim()).filter(Boolean).forEach(item=>{upd=[...upd,{id:Date.now().toString()+Math.random(),item,by:form.householdName,checked:false,source:"portal"}];});
-      setToBuy(upd);await save("tp5:tobuy",upd);
+      setToBuy(upd);await save("tp4:tobuy",upd);
     }
-    const saved=await save("tp5:hh",newHH);
+    const saved=await save("tp4:hh",newHH);
     setSub(true);
     if(saved)showToast("✅ Saved to Google Sheet!");
     setTimeout(()=>{setSub(false);setForm(mkForm());setStep(0);setTab("crew");},2400);
@@ -443,45 +443,45 @@ function TripPortal(){
     setBCat(true);
     const catId = categorizePlace(bPlace.types, bPlace.title);
     const item={id:Date.now().toString(),...bPlace,category:catId,status:bStatus,lockedDate:bStatus==="locked_in"?bDate:"",lockedTime:bStatus==="locked_in"?bTime:"",done:false,addedBy:bBy||"Anonymous",addedAt:new Date().toISOString(),source:"portal"};
-    const upd=[...bucketList,item];setBucket(upd);await save("tp5:bucket",upd);
+    const upd=[...bucketList,item];setBucket(upd);await save("tp4:bucket",upd);
     setBCat(false);setBPlace(null);setBStatus("");setBDate("");setBTime("");setBBy("");
   }
-  async function toggleBucket(id){const upd=bucketList.map(i=>i.id===id?{...i,done:!i.done}:i);setBucket(upd);await save("tp5:bucket",upd);}
+  async function toggleBucket(id){const upd=bucketList.map(i=>i.id===id?{...i,done:!i.done}:i);setBucket(upd);await save("tp4:bucket",upd);}
   async function deleteBucket(id){
     if(!confirm("Remove this item from the bucket list?"))return;
-    const upd=bucketList.filter(i=>i.id!==id);setBucket(upd);await save("tp5:bucket",upd);
+    const upd=bucketList.filter(i=>i.id!==id);setBucket(upd);await save("tp4:bucket",upd);
   }
   async function saveBucketEdit(){
     if(!editingBucket)return;
     const upd=bucketList.map(i=>i.id===editingBucket.id?{...i,...editingBucket}:i);
-    setBucket(upd);await save("tp5:bucket",upd);setEditingBucket(null);
+    setBucket(upd);await save("tp4:bucket",upd);setEditingBucket(null);
   }
   async function deleteHH(id){
     if(!confirm("Remove this household from the trip?"))return;
-    const upd=households.filter(h=>h.id!==id);setHH(upd);await save("tp5:hh",upd);
+    const upd=households.filter(h=>h.id!==id);setHH(upd);await save("tp4:hh",upd);
   }
   async function saveHHEdit(){
     if(!editHHData)return;
     const upd=households.map(h=>h.id===editHHData.id?{...h,...editHHData}:h);
-    setHH(upd);await save("tp5:hh",upd);setEditingHH(null);setEditHHData(null);
+    setHH(upd);await save("tp4:hh",upd);setEditingHH(null);setEditHHData(null);
   }
   const updHHP=(idx,f,v)=>setEditHHData(h=>({...h,people:h.people.map((p,i)=>i===idx?{...p,[f]:v}:p)}));
   const togHHProf=(idx,pid)=>setEditHHData(h=>({...h,people:h.people.map((p,i)=>i===idx?{...p,foodProfiles:(p.foodProfiles||[]).includes(pid)?p.foodProfiles.filter(x=>x!==pid):[...p.foodProfiles,pid]}:p)}));
-  async function toggleBring(id){const u=toBring.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBring(u);await save("tp5:tobring",u);}
-  async function deleteBring(id){const u=toBring.filter(i=>i.id!==id);setToBring(u);await save("tp5:tobring",u);}
-  async function saveBringEdit(){if(!editingBring)return;const u=toBring.map(i=>i.id===editingBring.id?{...i,...editingBring}:i);setToBring(u);await save("tp5:tobring",u);setEditingBring(null);}
-  async function toggleBuy(id){const u=toBuy.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBuy(u);await save("tp5:tobuy",u);}
-  async function deleteBuyFn(id){const u=toBuy.filter(i=>i.id!==id);setToBuy(u);await save("tp5:tobuy",u);}
-  async function saveBuyEdit(){if(!editingBuyItem)return;const u=toBuy.map(i=>i.id===editingBuyItem.id?{...i,...editingBuyItem}:i);setToBuy(u);await save("tp5:tobuy",u);setEditingBuyItem(null);}
+  async function toggleBring(id){const u=toBring.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBring(u);await save("tp4:tobring",u);}
+  async function deleteBring(id){const u=toBring.filter(i=>i.id!==id);setToBring(u);await save("tp4:tobring",u);}
+  async function saveBringEdit(){if(!editingBring)return;const u=toBring.map(i=>i.id===editingBring.id?{...i,...editingBring}:i);setToBring(u);await save("tp4:tobring",u);setEditingBring(null);}
+  async function toggleBuy(id){const u=toBuy.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBuy(u);await save("tp4:tobuy",u);}
+  async function deleteBuyFn(id){const u=toBuy.filter(i=>i.id!==id);setToBuy(u);await save("tp4:tobuy",u);}
+  async function saveBuyEdit(){if(!editingBuyItem)return;const u=toBuy.map(i=>i.id===editingBuyItem.id?{...i,...editingBuyItem}:i);setToBuy(u);await save("tp4:tobuy",u);setEditingBuyItem(null);}
   async function addBring(){
     if(!newBring.item.trim())return;
     const u=[...toBring,{id:Date.now().toString(),item:newBring.item.trim(),by:newBring.by||"Anonymous",checked:false,source:"portal"}];
-    setToBring(u);await save("tp5:tobring",u);setNewBring({item:"",by:""});
+    setToBring(u);await save("tp4:tobring",u);setNewBring({item:"",by:""});
   }
   async function addBuy(){
     if(!newBuy2.item.trim())return;
     const u=[...toBuy,{id:Date.now().toString(),item:newBuy2.item.trim(),by:newBuy2.by||"Anonymous",checked:false,source:"portal"}];
-    setToBuy(u);await save("tp5:tobuy",u);setNewBuy2({item:"",by:""});
+    setToBuy(u);await save("tp4:tobuy",u);setNewBuy2({item:"",by:""});
   }
 
   function discoverSearch(catId, members){
@@ -508,20 +508,20 @@ function TripPortal(){
       done:false, rating:place.rating||null,
       addedBy:"Discover", addedAt:new Date().toISOString(), source:"portal",
     };
-    const upd=[...bucketList,item]; setBucket(upd); await save("tp5:bucket",upd);
+    const upd=[...bucketList,item]; setBucket(upd); await save("tp4:bucket",upd);
     showToast("✅ Added to Bucket List!");
   }
   async function saveTrip(){
     setTrip(editTrip);
-    const ok=await save("tp5:config",editTrip);
+    const ok=await save("tp4:config",editTrip);
     setEditMode(false);
     if(ok)showToast("✅ Trip details saved!");
   }
   async function resetAll(){
     if(!confirm("Reset ALL trip data? Cannot be undone."))return;
     setTrip(DEFAULT_TRIP);setHH([]);setBucket([]);setToBring([]);setToBuy([]);
-    await save("tp5:config",DEFAULT_TRIP);await save("tp5:hh",[]);
-    await save("tp5:bucket",[]);await save("tp5:tobring",[]);await save("tp5:tobuy",[]);
+    await save("tp4:config",DEFAULT_TRIP);await save("tp4:hh",[]);
+    await save("tp4:bucket",[]);await save("tp4:tobring",[]);await save("tp4:tobuy",[]);
     showToast("✅ All data reset");
   }
   function tryPin(){
