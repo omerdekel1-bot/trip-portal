@@ -4,9 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
   <title>Trip Portal</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
@@ -59,10 +59,10 @@ const DEFAULT_TRIP = {
   accommodation:"Blue Ridge Cabin · Sleeps 16 · Full kitchen · Fire pit · Pool",
   commitments:"Luray Caverns — Jul 5 @ 10am · Group dinner — Jul 6 @ 7pm",
   dailyAccommodation:{
-    "2026-07-04":"Driving day — arriving evening",
-    "2026-07-05":"Blue Ridge Cabin, Front Royal VA",
-    "2026-07-06":"Blue Ridge Cabin, Front Royal VA",
-    "2026-07-07":"Check out — drive home",
+    "2026-07-04":{name:"Driving day — arriving evening",address:"",link:""},
+    "2026-07-05":{name:"Blue Ridge Cabin",address:"Front Royal, VA",link:""},
+    "2026-07-06":{name:"Blue Ridge Cabin",address:"Front Royal, VA",link:""},
+    "2026-07-07":{name:"Check out — drive home",address:"",link:""},
   },
 };
 const FOOD_PROFILES = [
@@ -267,6 +267,11 @@ function tripDayOptions(trip){
   }
   return days;
 }
+function parseAccom(val){
+  if(!val) return {name:"",address:"",link:""};
+  if(typeof val==="string") return {name:val,address:"",link:""};
+  return {name:val.name||"",address:val.address||"",link:val.link||""};
+}
 function Btn({onClick,children,variant="primary",disabled=false,style={},small=false}){
   const V={
     primary:{background:C.terra,color:"white",border:"none"},
@@ -374,6 +379,7 @@ function TripPortal(){
   const [pinErr,setPinErr]=useState(false);
   const [editMode,setEditMode]=useState(false);
   const [editTrip,setEditTrip]=useState(null);
+  const [accomSearchDay,setAccomSearchDay]=useState(null);
   const [toast,setToast]=useState(null);
   const [showExport,setShowExp]=useState(false);
   const [exportMdText,setExpMd]=useState("");
@@ -559,7 +565,7 @@ function TripPortal(){
       `**✨ Vibe:** ${trip.vibe}`,"",
       `## 🗺️ Route`,...trip.stops.map((s,i)=>`${i+1}. **${s.name}** — ${s.note}`),"",
       `## 🏠 Accommodation`,trip.accommodation||"—","",
-      ...(Object.keys(trip.dailyAccommodation||{}).length?[`### Per Day`,...Object.entries(trip.dailyAccommodation).map(([d,n])=>`- **${fDate(d)}:** ${n}`),""]:[]),
+      ...(Object.keys(trip.dailyAccommodation||{}).length?[`### Per Day`,...Object.entries(trip.dailyAccommodation).map(([d,v])=>{const a=parseAccom(v);return a.name?`- **${fDate(d)}:** ${a.name}${a.address?` · ${a.address}`:""}${a.link?` · ${a.link}`:""}`:"";}).filter(Boolean),""]:[]),
       `## 📅 Fixed Commitments`,trip.commitments||"—","",
       `## 👨‍👩‍👧‍👦 Who's Coming (${households.length} household${households.length!==1?"s":""})`,
       ...(households.length?households.flatMap(hh=>{
@@ -736,10 +742,20 @@ function TripPortal(){
             </div>
 
             {/* Daily accommodation */}
-            {trip.dailyAccommodation?.[dateStr]&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:`${C.amber}10`,borderRadius:10,border:`1px solid ${C.amber}30`,marginBottom:10}}>
-              <span style={{fontSize:14}}>🏠</span>
-              <span style={{fontSize:13,color:"#7A5A20",fontWeight:500}}>{trip.dailyAccommodation[dateStr]}</span>
-            </div>}
+            {trip.dailyAccommodation?.[dateStr]&&(()=>{
+              const a=parseAccom(trip.dailyAccommodation[dateStr]);
+              if(!a.name)return null;
+              return <div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"9px 12px",background:`${C.amber}10`,borderRadius:10,border:`1px solid ${C.amber}30`,marginBottom:10}}>
+                <span style={{fontSize:14,flexShrink:0}}>🏠</span>
+                <div style={{flex:1}}>
+                  {a.link
+                    ?<a href={a.link} target="_blank" rel="noopener noreferrer" style={{fontSize:13,color:C.terra,fontWeight:500,textDecoration:"none"}}>{a.name} ↗</a>
+                    :<span style={{fontSize:13,color:"#7A5A20",fontWeight:500}}>{a.name}</span>
+                  }
+                  {a.address&&<a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a.address)}`} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.terra,marginTop:2,display:"block",textDecoration:"none"}}>{a.address} ↗</a>}
+                </div>
+              </div>;
+            })()}
 
             {dayItems.length===0
               ?<div style={{padding:"14px 16px",background:C.card,borderRadius:12,border:`1px dashed ${C.border}`,color:C.muted,fontSize:13,fontStyle:"italic"}}>Nothing locked in yet for this day</div>
@@ -1364,15 +1380,35 @@ function TripPortal(){
           <Field label="Fixed Commitments" value={editTrip.commitments||""} onChange={v=>setEditTrip(e=>({...e,commitments:v}))} multiline/>
           <div>
             <div style={{fontSize:13,fontWeight:500,color:C.muted,marginBottom:8}}>Accommodation per day</div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {tripDayOptions(editTrip).map(d=>(
-                <div key={d.value} style={{display:"flex",gap:10,alignItems:"center"}}>
-                  <div style={{flexShrink:0,fontSize:12,color:C.muted,width:110,fontWeight:500}}>{d.label.split(" — ")[0]}</div>
-                  <input value={(editTrip.dailyAccommodation||{})[d.value]||""} onChange={e=>setEditTrip(t=>({...t,dailyAccommodation:{...(t.dailyAccommodation||{}),[d.value]:e.target.value}}))}
-                    placeholder="e.g. Blue Ridge Cabin"
-                    style={{flex:1,padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.bg,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
-                </div>
-              ))}
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {tripDayOptions(editTrip).map(d=>{
+                const a=parseAccom((editTrip.dailyAccommodation||{})[d.value]);
+                const setA=(field,val)=>setEditTrip(t=>({...t,dailyAccommodation:{...(t.dailyAccommodation||{}),[d.value]:{...parseAccom((t.dailyAccommodation||{})[d.value]),[field]:val}}}));
+                return <div key={d.value} style={{background:C.bg,borderRadius:12,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.navy,marginBottom:8}}>{d.label}</div>
+                  {/* Name + search button */}
+                  {accomSearchDay===d.value?(
+                    <div style={{marginBottom:8}}>
+                      <PlacesSearch mapsReady={mapsReady} onSelect={p=>{
+                        setEditTrip(t=>({...t,dailyAccommodation:{...(t.dailyAccommodation||{}),[d.value]:{name:p.title,address:p.address||"",link:p.mapsUrl||""}}}));
+                        setAccomSearchDay(null);
+                      }}/>
+                      <button onClick={()=>setAccomSearchDay(null)} style={{marginTop:6,background:"none",border:"none",color:C.muted,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>✕ Cancel search</button>
+                    </div>
+                  ):(
+                    <div style={{display:"flex",gap:7,marginBottom:7}}>
+                      <input value={a.name} onChange={e=>setA("name",e.target.value)} placeholder="Name or description"
+                        style={{flex:1,padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.card,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                      <button onClick={()=>setAccomSearchDay(d.value)}
+                        style={{padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.card,cursor:"pointer",fontSize:14,color:C.muted,flexShrink:0}}>🔍</button>
+                    </div>
+                  )}
+                  <input value={a.address} onChange={e=>setA("address",e.target.value)} placeholder="Address (optional)"
+                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.card,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif",marginBottom:7}}/>
+                  <input value={a.link} onChange={e=>setA("link",e.target.value)} placeholder="Airbnb / hotel / booking link (optional)"
+                    style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:C.card,fontSize:13,color:C.text,fontFamily:"'DM Sans',sans-serif"}}/>
+                </div>;
+              })}
             </div>
           </div>
           <Btn onClick={saveTrip}>Save Changes ✓</Btn>
