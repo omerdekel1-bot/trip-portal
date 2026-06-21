@@ -568,7 +568,27 @@ function TripPortal(){
       `**📍 Destination:** ${trip.destination}`,
       `**📅 Dates:** ${fDate(trip.startDate)} → ${fDate(trip.endDate)}`,
       `**✨ Vibe:** ${trip.vibe}`,"",
-      `## 🗺️ Route`,...trip.stops.map((s,i)=>`${i+1}. **${s.name}** — ${s.note}`),"",
+      `## 🗓️ Itinerary`,
+      ...(()=>{
+        const days=[];
+        const start=new Date(trip.startDate+"T12:00:00");
+        const end=new Date(trip.endDate+"T12:00:00");
+        for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)) days.push(d.toISOString().split("T")[0]);
+        const scheduled=bucketList.filter(b=>b.status==="locked_in"&&b.lockedDate);
+        const unscheduled=bucketList.filter(b=>b.status==="locked_in"&&!b.lockedDate);
+        const out=days.flatMap((dateStr,idx)=>{
+          const dayItems=scheduled.filter(b=>b.lockedDate===dateStr).sort((a,b)=>(a.lockedTime||"99:99").localeCompare(b.lockedTime||"99:99"));
+          const accom=trip.dailyAccommodation?.[dateStr]?parseAccom(trip.dailyAccommodation[dateStr]):null;
+          return [
+            `### Day ${idx+1} — ${fDate(dateStr)}`,
+            accom&&accom.name?`🏠 ${accom.name}${accom.address?` · ${accom.address}`:""}`:"",
+            ...(dayItems.length?dayItems.map(b=>`- ${b.lockedTime?`**${b.lockedTime}** `:""}${b.title}${b.address?` · ${b.address}`:""}`):["_Nothing locked in yet_"]),
+            "",
+          ].filter(s=>s!=="");
+        });
+        if(unscheduled.length) out.push("### Unscheduled",...unscheduled.map(b=>`- ${b.title}${b.address?` · ${b.address}`:""}`),"");
+        return out;
+      })(),
       `## 🏠 Accommodation`,trip.accommodation||"—","",
       ...(Object.keys(trip.dailyAccommodation||{}).length?[`### Per Day`,...Object.entries(trip.dailyAccommodation).map(([d,v])=>{const a=parseAccom(v);return a.name?`- **${fDate(d)}:** ${a.name}${a.address?` · ${a.address}`:""}${a.link?` · ${a.link}`:""}`:"";}).filter(Boolean),""]:[]),
       `## 📅 Fixed Commitments`,trip.commitments||"—","",
