@@ -107,6 +107,7 @@ const BUCKET_CATS = [
   {id:"shopping",   label:"Shopping",        icon:"🛍️"},
   {id:"events",     label:"Events",          icon:"🎭"},
   {id:"water",      label:"Water & Swimming",icon:"🌊"},
+  {id:"scenic",     label:"Scenic Spots",    icon:"🏔️"},
 ];
 const BUCKET_STATUSES = [
   {id:"must_see",   label:"Must See",   icon:"🌟",color:"#C06B3A"},
@@ -126,6 +127,7 @@ const DISCOVER_CATS = [
   {id:"hikes",      label:"Hiking",      icon:"🥾"},
   {id:"water",      label:"Water Fun",   icon:"🌊"},
   {id:"cafes",      label:"Cafés",       icon:"☕"},
+  {id:"specialty_coffee",label:"Specialty Coffee", icon:"☕️"},
   {id:"attractions",label:"Attractions", icon:"🏛️"},
   {id:"scenic",     label:"Scenic",      icon:"🌅"},
   {id:"shopping",   label:"Shopping",    icon:"🛍️"},
@@ -138,6 +140,7 @@ function buildQuery(catId, members, destination){
     const defaults = {
       restaurants:`restaurants ${dest}`, hikes:`hiking trails ${dest}`,
       water:`water activities swimming ${dest}`, cafes:`coffee shops cafes ${dest}`,
+      specialty_coffee:`specialty coffee roaster ${dest}`,
       attractions:`tourist attractions things to do ${dest}`, scenic:`scenic viewpoints overlooks ${dest}`,
       shopping:`shopping markets ${dest}`, family:`family activities kids ${dest}`,
     };
@@ -176,6 +179,8 @@ function buildQuery(catId, members, destination){
     case "cafes":
       if(isGF) return `gluten free bakery cafe ${dest}`;
       return `coffee shops cafes ${dest}`;
+    case "specialty_coffee":
+      return `specialty coffee roaster independent ${dest}`;
     case "scenic":
       if(hasYoungKid) return `easy accessible scenic viewpoints ${dest}`;
       return `scenic overlooks viewpoints ${dest}`;
