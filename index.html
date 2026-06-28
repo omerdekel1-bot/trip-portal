@@ -358,6 +358,14 @@ function TripPortal(){
   const [form,setForm]=useState(mkForm());
   const [submitted,setSub]=useState(false);
   const [listTab,setListTab]=useState("bucket");
+  const [gBreakfasts,setGBreakfasts]=useState("");
+  const [gDinners,setGDinners]=useState("");
+  const [gMeals,setGMeals]=useState("");
+  const [gCoffee,setGCoffee]=useState(false);
+  const [gExtras,setGExtras]=useState("");
+  const [gList,setGList]=useState(null);
+  const [gLoading,setGLoading]=useState(false);
+  const [gError,setGError]=useState("");
   const [bPlace,setBPlace]=useState(null);
   const [bStatus,setBStatus]=useState("");
   const [bDate,setBDate]=useState("");
@@ -491,7 +499,48 @@ function TripPortal(){
   async function toggleBuy(id){const u=toBuy.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBuy(u);await save("tp4:tobuy",u);}
   async function deleteBuyFn(id){const u=toBuy.filter(i=>i.id!==id);setToBuy(u);await save("tp4:tobuy",u);}
   async function saveBuyEdit(){if(!editingBuyItem)return;const u=toBuy.map(i=>i.id===editingBuyItem.id?{...i,...editingBuyItem}:i);setToBuy(u);await save("tp4:tobuy",u);setEditingBuyItem(null);}
-  async function addBring(){
+  async function generateGroceryList(){
+    setGLoading(true);setGError("");setGList(null);
+    const allPeople=households.flatMap(hh=>(hh.people||[]).map(p=>({...p,hhName:hh.householdName})));
+    const adults=allPeople.filter(p=>p.type==="adult");
+    const kids=allPeople.filter(p=>p.type==="kid");
+    const allProfiles=allPeople.flatMap(p=>p.foodProfiles||[]);
+    const hasVeg=allProfiles.some(p=>["veggie","vegan"].includes(p));
+    const hasPesc=allProfiles.includes("pescatarian");
+    const hasGF=allProfiles.includes("glutenfree");
+    const allergies=allPeople.filter(p=>p.allergies).map(p=>`${p.name||"Guest"}: ${p.allergies}`);
+    const kidAges=kids.map(k=>k.age).filter(Boolean);
+    const prompt=`You are a grocery list generator for a family group vacation. Generate a practical, complete grocery list.
+
+Group: ${allPeople.length||"unknown"} people total — ${adults.length} adults, ${kids.length} kids${kidAges.length?` (ages ${kidAges.join(", ")})`:""}.
+Dietary: ${[hasVeg?"vegetarian present":"",hasPesc?"pescatarian present":"",hasGF?"gluten-free present":""].filter(Boolean).join(", ")||"no restrictions"}.
+Allergies: ${allergies.length?allergies.join("; "):"none reported"}.
+Breakfasts at house: ${gBreakfasts||0}. Dinners at house: ${gDinners||0}.
+Specific meals planned: ${gMeals||"none"}.
+Coffee drinkers: ${gCoffee?"yes":"no"}.
+Extra notes: ${gExtras||"none"}.
+
+Scale quantities for the group size. Include kid-friendly options. Be practical and specific.
+
+Respond ONLY with valid JSON, no markdown, no backticks, in this exact format:
+{"categories":[{"name":"🥚 Breakfast","items":[{"name":"Eggs","qty":"2 dozen"}]},{"name":"🍖 Dinner","items":[]},{"name":"🥤 Drinks","items":[]},{"name":"🧃 Snacks","items":[]},{"name":"🧴 Basics","items":[]}]}`;
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
+      const data=await res.json();
+      const text=data.content?.[0]?.text||"";
+      const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
+      setGList(parsed.categories.map(cat=>({...cat,items:cat.items.map(item=>({...item,checked:true}))})));
+    }catch(e){setGError("Failed to generate list — try again.");}
+    setGLoading(false);
+  }
+  async function pushGroceriesToShoppingList(){
+    if(!gList)return;
+    const checked=gList.flatMap(cat=>cat.items.filter(i=>i.checked));
+    if(!checked.length){showToast("No items selected");return;}
+    const newItems=checked.map(item=>({id:Date.now().toString()+Math.random().toString(36).substr(2,4),item:item.qty?`${item.name} (${item.qty})`:item.name,by:"Grocery Planner",checked:false,source:"portal"}));
+    const upd=[...toBuy,...newItems];setToBuy(upd);await save("tp4:tobuy",upd);
+    showToast(`✅ Added ${newItems.length} items to shopping list!`);
+  }
     if(!newBring.item.trim())return;
     const u=[...toBring,{id:Date.now().toString(),item:newBring.item.trim(),by:newBring.by||"Anonymous",checked:false,source:"portal"}];
     setToBring(u);await save("tp4:tobring",u);setNewBring({item:"",by:""});
@@ -1069,7 +1118,7 @@ function TripPortal(){
       <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>Lists</div>
       <div style={{color:C.muted,fontSize:14,marginBottom:18}}>Everyone can add · Updated live</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:22}}>
-        {[["bucket","⭐ Bucket"],["tobring","🎒 To Bring"],["tobuy","🛒 To Buy"]].map(([id,label])=><button key={id} onClick={()=>setListTab(id)} style={{padding:"11px 6px",borderRadius:12,border:`1.5px solid ${listTab===id?C.terra:C.border}`,background:listTab===id?C.terra:C.card,color:listTab===id?"white":C.text,fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}>{label}</button>)}
+        {[["bucket","⭐ Bucket"],["tobring","🎒 To Bring"],["tobuy","🛒 To Buy"],["grocery","🧺 Groceries"]].map(([id,label])=><button key={id} onClick={()=>setListTab(id)} style={{padding:"11px 6px",borderRadius:12,border:`1.5px solid ${listTab===id?C.terra:C.border}`,background:listTab===id?C.terra:C.card,color:listTab===id?"white":C.text,fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}>{label}</button>)}
       </div>
 
       {listTab==="bucket"&&<>
@@ -1246,9 +1295,77 @@ function TripPortal(){
           })}
         </div>
       </>}
-    </div>}
+      {listTab==="grocery"&&<>
+        <div style={{marginBottom:16}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:C.navy,marginBottom:4}}>🧺 Grocery Planner</div>
+          <div style={{fontSize:13,color:C.muted,marginBottom:16}}>AI-powered list based on your group and meal plan</div>
 
-    {/* ── DISCOVER ─────────────────────────────────────────────────────────────── */}
+          {/* Questionnaire */}
+          <Card style={{padding:16,marginBottom:16}}>
+            <div style={{fontWeight:600,fontSize:14,color:C.navy,marginBottom:12}}>Tell us about your meals</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+              <Field label="Breakfasts at house" value={gBreakfasts} onChange={setGBreakfasts} type="number" placeholder="e.g. 3"/>
+              <Field label="Dinners at house" value={gDinners} onChange={setGDinners} type="number" placeholder="e.g. 2"/>
+            </div>
+            <Field label="Specific meals planned" value={gMeals} onChange={setGMeals} placeholder="e.g. BBQ night, pasta night, taco night" multiline/>
+            <div style={{display:"flex",alignItems:"center",gap:10,margin:"10px 0"}}>
+              <div onClick={()=>setGCoffee(c=>!c)} style={{width:22,height:22,borderRadius:6,border:`2px solid ${gCoffee?C.terra:C.border}`,background:gCoffee?C.terra:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                {gCoffee&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}
+              </div>
+              <span style={{fontSize:13,color:C.text}}>Coffee drinkers in the group ☕</span>
+            </div>
+            <Field label="Anything else to consider (optional)" value={gExtras} onChange={setGExtras} placeholder="e.g. kosher, nut allergy, lots of picky kids" multiline/>
+            <div style={{marginTop:12}}>
+              <Btn onClick={generateGroceryList} disabled={gLoading||(!gBreakfasts&&!gDinners)}>
+                {gLoading?"✨ Generating…":"✨ Generate Grocery List"}
+              </Btn>
+            </div>
+          </Card>
+
+          {/* Participant summary */}
+          {households.length>0&&(()=>{
+            const all=households.flatMap(hh=>(hh.people||[]).map(p=>({...p})));
+            const kids=all.filter(p=>p.type==="kid");
+            const adults=all.filter(p=>p.type==="adult");
+            const profiles=[...new Set(all.flatMap(p=>p.foodProfiles||[]))];
+            return <div style={{padding:"10px 14px",background:`${C.amber}10`,borderRadius:12,border:`1px solid ${C.amber}30`,fontSize:12,color:"#7A5A20",marginBottom:16}}>
+              👥 {all.length} people — {adults.length} adults, {kids.length} kids
+              {profiles.length>0&&<span> · {profiles.join(", ")}</span>}
+            </div>;
+          })()}
+
+          {gError&&<div style={{padding:"12px 14px",background:"#FEE8E8",borderRadius:12,color:"#C0443A",fontSize:13,marginBottom:16}}>{gError}</div>}
+
+          {/* Generated list */}
+          {gList&&<>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{fontWeight:600,fontSize:14,color:C.navy}}>Suggested list — check what you need</div>
+              <button onClick={()=>{setGList(l=>l.map(cat=>({...cat,items:cat.items.map(i=>({...i,checked:!cat.items.every(x=>x.checked)}))}))));}} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",fontSize:11,color:C.muted,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Toggle all</button>
+            </div>
+            {gList.map((cat,ci)=><div key={ci} style={{marginBottom:16}}>
+              <div style={{fontWeight:600,fontSize:13,color:C.navy,marginBottom:8}}>{cat.name}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {cat.items.map((item,ii)=><div key={ii} onClick={()=>setGList(l=>l.map((c,cIdx)=>cIdx!==ci?c:{...c,items:c.items.map((it,iIdx)=>iIdx!==ii?it:{...it,checked:!it.checked})}))} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 12px",background:C.card,borderRadius:10,border:`1px solid ${C.border}`,cursor:"pointer",opacity:item.checked?1:0.45,transition:"opacity 0.15s"}}>
+                  <div style={{flexShrink:0,width:20,height:20,borderRadius:5,border:`2px solid ${item.checked?C.terra:C.border}`,background:item.checked?C.terra:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {item.checked&&<span style={{color:"white",fontSize:10,fontWeight:700}}>✓</span>}
+                  </div>
+                  <div style={{flex:1,fontSize:13,fontWeight:500,color:C.text}}>{item.name}</div>
+                  {item.qty&&<div style={{fontSize:11,color:C.muted,flexShrink:0}}>{item.qty}</div>}
+                </div>)}
+              </div>
+            </div>)}
+            <div style={{marginTop:4}}>
+              <Btn onClick={pushGroceriesToShoppingList} variant="navy">
+                ✅ Add checked items to Shopping List ({gList.flatMap(c=>c.items.filter(i=>i.checked)).length} items)
+              </Btn>
+            </div>
+            <div style={{textAlign:"center",marginTop:10}}>
+              <button onClick={generateGroceryList} style={{background:"none",border:"none",color:C.muted,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",textDecoration:"underline"}}>Regenerate list</button>
+            </div>
+          </>}
+        </div>
+      </>}
+    </div>}
     {tab==="discover"&&(()=>{
       const allPeople=households.flatMap(hh=>(hh.people||[]).map(p=>({...p,hhName:hh.householdName})));
       const addedIds=new Set(bucketList.map(b=>b.placeId).filter(Boolean));
