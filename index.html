@@ -499,7 +499,7 @@ function TripPortal(){
   async function toggleBuy(id){const u=toBuy.map(i=>i.id===id?{...i,checked:!i.checked}:i);setToBuy(u);await save("tp4:tobuy",u);}
   async function deleteBuyFn(id){const u=toBuy.filter(i=>i.id!==id);setToBuy(u);await save("tp4:tobuy",u);}
   async function saveBuyEdit(){if(!editingBuyItem)return;const u=toBuy.map(i=>i.id===editingBuyItem.id?{...i,...editingBuyItem}:i);setToBuy(u);await save("tp4:tobuy",u);setEditingBuyItem(null);}
-  async function generateGroceryList(){
+  async function addBring(){
     setGLoading(true);setGError("");setGList(null);
     const allPeople=households.flatMap(hh=>(hh.people||[]).map(p=>({...p,hhName:hh.householdName})));
     const adults=allPeople.filter(p=>p.type==="adult");
@@ -523,6 +523,40 @@ Extra notes: ${gExtras||"none"}.
 Scale quantities for the group size. Include kid-friendly options. Be practical and specific.
 
 Respond ONLY with valid JSON, no markdown, no backticks, in this exact format:
+{"categories":[{"name":"🥚 Breakfast","items":[{"name":"Eggs","qty":"2 dozen"}]},{"name":"🍖 Dinner","items":[]},{"name":"🥤 Drinks","items":[]},{"name":"🧃 Snacks","items":[]},{"name":"🧴 Basics","items":[]}]}`;
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
+      const data=await res.json();
+      const text=data.content?.[0]?.text||"";
+      const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
+      setGList(parsed.categories.map(cat=>({...cat,items:cat.items.map(item=>({...item,checked:true}))})));
+    }catch(e){setGError("Failed to generate list — try again.");}
+    setGLoading(false);
+  }
+  async function generateGroceryList(){
+    setGLoading(true);setGError("");setGList(null);
+    const allPeople=households.flatMap(hh=>(hh.people||[]).map(p=>({...p,hhName:hh.householdName})));
+    const adults=allPeople.filter(p=>p.type==="adult");
+    const kids=allPeople.filter(p=>p.type==="kid");
+    const allProfiles=allPeople.flatMap(p=>p.foodProfiles||[]);
+    const hasVeg=allProfiles.some(p=>["veggie","vegan"].includes(p));
+    const hasPesc=allProfiles.includes("pescatarian");
+    const hasGF=allProfiles.includes("glutenfree");
+    const allergies=allPeople.filter(p=>p.allergies).map(p=>`${p.name||"Guest"}: ${p.allergies}`);
+    const kidAges=kids.map(k=>k.age).filter(Boolean);
+    const prompt=`You are a grocery list generator for a family group vacation. Generate a practical, complete grocery list.
+
+Group: ${allPeople.length||"unknown"} people total — ${adults.length} adults, ${kids.length} kids${kidAges.length?` (ages ${kidAges.join(", ")})`:""}.
+Dietary: ${[hasVeg?"vegetarian present":"",hasPesc?"pescatarian present":"",hasGF?"gluten-free present":""].filter(Boolean).join(", ")||"no restrictions"}.
+Allergies: ${allergies.length?allergies.join("; "):"none reported"}.
+Breakfasts at house: ${gBreakfasts||0}. Dinners at house: ${gDinners||0}.
+Specific meals planned: ${gMeals||"none"}.
+Coffee drinkers: ${gCoffee?"yes":"no"}.
+Extra notes: ${gExtras||"none"}.
+
+Scale quantities for the group size. Include kid-friendly options. Be practical and specific.
+
+Respond ONLY with valid JSON, no markdown, no backticks:
 {"categories":[{"name":"🥚 Breakfast","items":[{"name":"Eggs","qty":"2 dozen"}]},{"name":"🍖 Dinner","items":[]},{"name":"🥤 Drinks","items":[]},{"name":"🧃 Snacks","items":[]},{"name":"🧴 Basics","items":[]}]}`;
     try{
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
