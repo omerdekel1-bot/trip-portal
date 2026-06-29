@@ -366,6 +366,14 @@ function TripPortal(){
   const [gList,setGList]=useState(null);
   const [gLoading,setGLoading]=useState(false);
   const [gError,setGError]=useState("");
+  // Meals tab
+  const [mealPlan,setMealPlan]=useState(null);      // saved plan {breakfasts,dinners,meals,coffee,extras}
+  const [mealPlanEditing,setMealPlanEditing]=useState(false);
+  const [mealDraft,setMealDraft]=useState({breakfasts:"",dinners:"",meals:"",coffee:false,extras:""});
+  const [mealMenu,setMealMenu]=useState(null);       // AI generated menu
+  const [mealGroceries,setMealGroceries]=useState(null); // AI generated groceries
+  const [mealLoading,setMealLoading]=useState(false);
+  const [mealError,setMealError]=useState("");
   const [bPlace,setBPlace]=useState(null);
   const [bStatus,setBStatus]=useState("");
   const [bDate,setBDate]=useState("");
@@ -432,6 +440,8 @@ function TripPortal(){
     setBucket(await load("tp4:bucket",[]));
     setToBring(await load("tp4:tobring",[]));
     setToBuy(await load("tp4:tobuy",[]));
+    const savedMealPlan=await load("tp4:meals",null);
+    if(savedMealPlan){setMealPlan(savedMealPlan);setMealDraft(savedMealPlan);}
     setLoading(false);
   }
   function showToast(msg,ok=true){setToast({msg,ok});setTimeout(()=>setToast(null),3500);}
@@ -503,6 +513,72 @@ function TripPortal(){
     if(!newBring.item.trim())return;
     const u=[...toBring,{id:Date.now().toString(),item:newBring.item.trim(),by:newBring.by||"Anonymous",checked:false,source:"portal"}];
     setToBring(u);await save("tp4:tobring",u);setNewBring({item:"",by:""});
+  }
+  async function saveMealPlan(){
+    await save("tp4:meals", mealDraft);
+    setMealPlan(mealDraft);
+    setMealPlanEditing(false);
+    setMealMenu(null);
+    setMealGroceries(null);
+  }
+  async function generateMealPlan(){
+    if(!mealPlan) return;
+    setMealLoading(true); setMealError(""); setMealMenu(null); setMealGroceries(null);
+    const allPeople=households.flatMap(hh=>(hh.people||[]).map(p=>({...p})));
+    const adults=allPeople.filter(p=>p.type==="adult");
+    const kids=allPeople.filter(p=>p.type==="kid");
+    const allProfiles=allPeople.flatMap(p=>p.foodProfiles||[]);
+    const hasVeg=allProfiles.some(p=>["veggie","vegan"].includes(p));
+    const hasGF=allProfiles.includes("glutenfree");
+    const allergies=allPeople.filter(p=>p.allergies).map(p=>`${p.name||"Guest"}: ${p.allergies}`);
+    const kidAges=kids.map(k=>k.age).filter(Boolean);
+    const prompt=`You are a meal planner for a family group vacation. Plan meals and generate a grocery list.
+
+Group: ${allPeople.length||"unknown"} people (${adults.length} adults, ${kids.length} kids${kidAges.length?`, ages ${kidAges.join(", ")}`:""}).
+Dietary: ${[hasVeg?"vegetarian present":"",hasGF?"gluten-free present":""].filter(Boolean).join(", ")||"no restrictions"}.
+Allergies: ${allergies.length?allergies.join("; "):"none"}.
+Breakfasts at house: ${mealPlan.breakfasts||0} (same meal every day is fine).
+Dinners at house: ${mealPlan.dinners||0}.
+Specific meals requested: ${mealPlan.meals||"none"}.
+Coffee drinkers: ${mealPlan.coffee?"yes":"no"}.
+Notes: ${mealPlan.extras||"none"}.
+
+Respond ONLY with valid JSON, no markdown, no backticks:
+{
+  "breakfast": {"name":"Scrambled eggs & toast","description":"Quick and easy, feeds everyone","ingredients":["eggs","bread","butter","jam"]},
+  "dinners": [
+    {"slot":"Dinner 1","name":"BBQ Night","description":"Grilled burgers and hot dogs","ingredients":["ground beef","hot dogs","buns","ketchup","mustard"]},
+    {"slot":"Dinner 2","name":"Pasta Night","description":"Spaghetti with marinara","ingredients":["spaghetti","marinara sauce","parmesan"]}
+  ],
+  "groceries": [
+    {"category":"🥚 Breakfast","items":[{"name":"Eggs","qty":"3 dozen"},{"name":"Bread","qty":"2 loaves"}]},
+    {"category":"🍖 Dinners","items":[{"name":"Ground beef","qty":"5 lbs"}]},
+    {"category":"🥤 Drinks","items":[{"name":"Orange juice","qty":"2 gallons"}]},
+    {"category":"🧃 Kids Snacks","items":[{"name":"Goldfish crackers","qty":"2 bags"}]},
+    {"category":"🧴 Basics","items":[{"name":"Olive oil","qty":"1 bottle"},{"name":"Salt & pepper","qty":"1 set"}]}
+  ]
+}`;
+    const PROXY_URL="https://script.google.com/macros/s/AKfycbx31Mer-3Pfjn2YdFrbD3v_ODiBqgSqJEyWbiQ9gsywRmMPWubbz5F9zT2DrtxAubDMyA/exec";
+    try{
+      const res=await fetch(`${PROXY_URL}?action=claude&prompt=${encodeURIComponent(prompt)}`);
+      const raw=await res.text();
+      const data=JSON.parse(raw);
+      if(data.error) throw new Error(data.error);
+      const text=data.result||"";
+      const clean=text.replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/\s*```$/,"").trim();
+      const parsed=JSON.parse(clean);
+      setMealMenu({breakfast:parsed.breakfast, dinners:parsed.dinners});
+      setMealGroceries(parsed.groceries.map(cat=>({...cat,items:cat.items.map(i=>({...i,checked:true}))})));
+    }catch(e){setMealError("Failed to generate — try again.");}
+    setMealLoading(false);
+  }
+  async function pushMealGroceries(){
+    if(!mealGroceries) return;
+    const checked=mealGroceries.flatMap(cat=>cat.items.filter(i=>i.checked));
+    if(!checked.length){showToast("No items selected");return;}
+    const newItems=checked.map(item=>({id:Date.now().toString()+Math.random().toString(36).substr(2,4),item:item.qty?`${item.name} (${item.qty})`:item.name,by:"Meal Planner",checked:false,source:"portal"}));
+    const upd=[...toBuy,...newItems];setToBuy(upd);await save("tp4:tobuy",upd);
+    showToast(`✅ Added ${newItems.length} items to shopping list!`);
   }
   async function generateGroceryList(){
     setGLoading(true);setGError("");setGList(null);
@@ -678,7 +754,8 @@ Respond ONLY with valid JSON, no markdown, no backticks, in this exact format:
   const navItems=[
     {id:"hero",icon:"🏠",label:"Home"},{id:"trip",icon:"🗺️",label:"The Trip"},
     {id:"join",icon:"✋",label:"Join"},{id:"crew",icon:"👥",label:"Crew"},
-    {id:"lists",icon:"⭐",label:"Lists"},{id:"discover",icon:"🔍",label:"Discover"},
+    {id:"lists",icon:"⭐",label:"Lists"},{id:"meals",icon:"🍽️",label:"Meals"},
+    {id:"discover",icon:"🔍",label:"Discover"},
     ...(orgMode?[{id:"admin",icon:"⚙️",label:"Admin"}]:[]),
   ];
 
@@ -1380,6 +1457,117 @@ Respond ONLY with valid JSON, no markdown, no backticks, in this exact format:
         </div>
       </>}
     </div>}
+
+    {/* ── MEALS ────────────────────────────────────────────────────────────────── */}
+    {tab==="meals"&&<div className="fu" style={{padding:"28px 20px"}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:C.navy,marginBottom:4}}>Meal Management</div>
+      <div style={{color:C.muted,fontSize:14,marginBottom:20}}>Plan your meals and generate a grocery list</div>
+
+      {/* Airbnb tip */}
+      <div style={{display:"flex",gap:10,padding:"12px 14px",background:`${C.amber}12`,border:`1px solid ${C.amber}40`,borderRadius:12,marginBottom:20}}>
+        <span style={{fontSize:18,flexShrink:0}}>💡</span>
+        <span style={{fontSize:13,color:"#7A5A20",lineHeight:1.5}}>Check what's already available at the Airbnb before shopping — basics like oil, salt, and condiments are often provided.</span>
+      </div>
+
+      {/* Meal Plan Section */}
+      <Card style={{padding:16,marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          <div style={{fontWeight:600,fontSize:15,color:C.navy}}>📋 Meal Plan</div>
+          {mealPlan&&!mealPlanEditing&&<button onClick={()=>setMealPlanEditing(true)} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 12px",fontSize:12,color:C.muted,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>✏️ Edit</button>}
+        </div>
+
+        {/* View mode */}
+        {mealPlan&&!mealPlanEditing&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div style={{background:C.cream,borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>Breakfasts at house</div>
+              <div style={{fontSize:20,fontWeight:700,color:C.navy}}>{mealPlan.breakfasts||0}</div>
+            </div>
+            <div style={{background:C.cream,borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>Dinners at house</div>
+              <div style={{fontSize:20,fontWeight:700,color:C.navy}}>{mealPlan.dinners||0}</div>
+            </div>
+          </div>
+          {mealPlan.meals&&<div style={{fontSize:13,color:C.text}}><span style={{fontWeight:600}}>Planned meals:</span> {mealPlan.meals}</div>}
+          {mealPlan.coffee&&<div style={{fontSize:13,color:C.text}}>☕ Coffee drinkers</div>}
+          {mealPlan.extras&&<div style={{fontSize:13,color:C.muted}}>{mealPlan.extras}</div>}
+          <div style={{marginTop:4}}>
+            <Btn onClick={generateMealPlan} disabled={mealLoading}>
+              {mealLoading?"✨ Generating…":"✨ Generate Menu & Groceries"}
+            </Btn>
+          </div>
+        </div>}
+
+        {/* Edit/Create mode */}
+        {(!mealPlan||mealPlanEditing)&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Breakfasts at house" value={mealDraft.breakfasts} onChange={v=>setMealDraft(d=>({...d,breakfasts:v}))} type="number" placeholder="e.g. 3"/>
+            <Field label="Dinners at house" value={mealDraft.dinners} onChange={v=>setMealDraft(d=>({...d,dinners:v}))} type="number" placeholder="e.g. 2"/>
+          </div>
+          <Field label="Specific meals planned" value={mealDraft.meals} onChange={v=>setMealDraft(d=>({...d,meals:v}))} placeholder="e.g. BBQ night, pasta night" multiline/>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div onClick={()=>setMealDraft(d=>({...d,coffee:!d.coffee}))} style={{width:22,height:22,borderRadius:6,border:`2px solid ${mealDraft.coffee?C.terra:C.border}`,background:mealDraft.coffee?C.terra:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              {mealDraft.coffee&&<span style={{color:"white",fontSize:12,fontWeight:700}}>✓</span>}
+            </div>
+            <span style={{fontSize:13,color:C.text}}>Coffee drinkers in the group ☕</span>
+          </div>
+          <Field label="Extra notes" value={mealDraft.extras} onChange={v=>setMealDraft(d=>({...d,extras:v}))} placeholder="e.g. nut allergy, picky eaters" multiline/>
+          <div style={{display:"flex",gap:8}}>
+            {mealPlanEditing&&<Btn variant="ghost" onClick={()=>setMealPlanEditing(false)} style={{flex:"0 0 auto",width:90}} small>Cancel</Btn>}
+            <Btn onClick={saveMealPlan} disabled={!mealDraft.breakfasts&&!mealDraft.dinners} style={{flex:1}}>💾 Save Meal Plan</Btn>
+          </div>
+        </div>}
+      </Card>
+
+      {mealError&&<div style={{padding:"12px 14px",background:"#FEE8E8",borderRadius:12,color:"#C0443A",fontSize:13,marginBottom:16}}>{mealError}</div>}
+
+      {/* Menu + Groceries */}
+      {mealMenu&&<>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:C.navy,marginBottom:12}}>🍳 Proposed Menu</div>
+
+        <Card style={{padding:16,marginBottom:12}}>
+          <div style={{fontWeight:600,fontSize:13,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>🥚 Breakfast (every morning)</div>
+          <div style={{fontWeight:700,fontSize:16,color:C.navy,marginBottom:4}}>{mealMenu.breakfast.name}</div>
+          <div style={{fontSize:13,color:C.muted,marginBottom:8}}>{mealMenu.breakfast.description}</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {(mealMenu.breakfast.ingredients||[]).map((ing,i)=><span key={i} style={{background:C.cream,borderRadius:20,padding:"3px 10px",fontSize:11,color:C.text}}>{ing}</span>)}
+          </div>
+        </Card>
+
+        {(mealMenu.dinners||[]).map((d,i)=><Card key={i} style={{padding:16,marginBottom:12}}>
+          <div style={{fontWeight:600,fontSize:13,color:C.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>🍖 {d.slot}</div>
+          <div style={{fontWeight:700,fontSize:16,color:C.navy,marginBottom:4}}>{d.name}</div>
+          <div style={{fontSize:13,color:C.muted,marginBottom:8}}>{d.description}</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {(d.ingredients||[]).map((ing,j)=><span key={j} style={{background:C.cream,borderRadius:20,padding:"3px 10px",fontSize:11,color:C.text}}>{ing}</span>)}
+          </div>
+        </Card>)}
+
+        {mealGroceries&&<>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:C.navy,marginBottom:4,marginTop:8}}>🛒 Grocery List</div>
+          <div style={{fontSize:13,color:C.muted,marginBottom:12}}>Uncheck anything you already have</div>
+          {mealGroceries.map((cat,ci)=><div key={ci} style={{marginBottom:16}}>
+            <div style={{fontWeight:600,fontSize:13,color:C.navy,marginBottom:8}}>{cat.category}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {cat.items.map((item,ii)=><div key={ii} onClick={()=>setMealGroceries(l=>l.map((c,cIdx)=>cIdx!==ci?c:{...c,items:c.items.map((it,iIdx)=>iIdx!==ii?it:{...it,checked:!it.checked})}))} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 12px",background:C.card,borderRadius:10,border:`1px solid ${C.border}`,cursor:"pointer",opacity:item.checked?1:0.45,transition:"opacity 0.15s"}}>
+                <div style={{flexShrink:0,width:20,height:20,borderRadius:5,border:`2px solid ${item.checked?C.terra:C.border}`,background:item.checked?C.terra:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {item.checked&&<span style={{color:"white",fontSize:10,fontWeight:700}}>✓</span>}
+                </div>
+                <div style={{flex:1,fontSize:13,fontWeight:500,color:C.text}}>{item.name}</div>
+                {item.qty&&<div style={{fontSize:11,color:C.muted,flexShrink:0}}>{item.qty}</div>}
+              </div>)}
+            </div>
+          </div>)}
+          <Btn onClick={pushMealGroceries} variant="navy">
+            ✅ Add checked items to Shopping List ({mealGroceries.flatMap(c=>c.items.filter(i=>i.checked)).length} items)
+          </Btn>
+          <div style={{textAlign:"center",marginTop:10}}>
+            <button onClick={generateMealPlan} style={{background:"none",border:"none",color:C.muted,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",textDecoration:"underline"}}>Regenerate</button>
+          </div>
+        </>}
+      </>}
+    </div>}
+
     {tab==="discover"&&(()=>{
       const allPeople=households.flatMap(hh=>(hh.people||[]).map(p=>({...p,hhName:hh.householdName})));
       const addedIds=new Set(bucketList.map(b=>b.placeId).filter(Boolean));
