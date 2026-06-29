@@ -532,13 +532,18 @@ Respond ONLY with valid JSON, no markdown, no backticks, in this exact format:
     const PROXY_URL="https://script.google.com/macros/s/AKfycbx31Mer-3Pfjn2YdFrbD3v_ODiBqgSqJEyWbiQ9gsywRmMPWubbz5F9zT2DrtxAubDMyA/exec";
     try{
       const encodedPrompt=encodeURIComponent(prompt);
-      const res=await fetch(`${PROXY_URL}?action=claude&prompt=${encodedPrompt}`);
-      const data=await res.json();
+      const fullUrl=`${PROXY_URL}?action=claude&prompt=${encodedPrompt}`;
+      console.log("Calling proxy:", fullUrl.substring(0,100));
+      const res=await fetch(fullUrl);
+      console.log("Response status:", res.status, res.ok);
+      const raw=await res.text();
+      console.log("Raw response:", raw.substring(0,200));
+      const data=JSON.parse(raw);
       if(data.error) throw new Error(data.error);
       const text=data.result||"";
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
       setGList(parsed.categories.map(cat=>({...cat,items:cat.items.map(item=>({...item,checked:true}))})));
-    }catch(e){setGError("Failed to generate list — try again.");}
+    }catch(e){console.error("Grocery error:",e);setGError("Failed: "+e.message);}
     setGLoading(false);
   }
   async function pushGroceriesToShoppingList(){
