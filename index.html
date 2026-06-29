@@ -529,10 +529,12 @@ Scale quantities for the group size. Include kid-friendly options. Be practical 
 
 Respond ONLY with valid JSON, no markdown, no backticks, in this exact format:
 {"categories":[{"name":"🥚 Breakfast","items":[{"name":"Eggs","qty":"2 dozen"}]},{"name":"🍖 Dinner","items":[]},{"name":"🥤 Drinks","items":[]},{"name":"🧃 Snacks","items":[]},{"name":"🧴 Basics","items":[]}]}`;
+    const PROXY_URL="https://script.google.com/macros/s/AKfycbx31Mer-3Pfjn2YdFrbD3v_ODiBqgSqJEyWbiQ9gsywRmMPWubbz5F9zT2DrtxAubDMyA/exec";
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
+      const res=await fetch(PROXY_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:"claude",prompt})});
       const data=await res.json();
-      const text=data.content?.[0]?.text||"";
+      if(data.error) throw new Error(data.error);
+      const text=data.result||"";
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
       setGList(parsed.categories.map(cat=>({...cat,items:cat.items.map(item=>({...item,checked:true}))})));
     }catch(e){setGError("Failed to generate list — try again.");}
