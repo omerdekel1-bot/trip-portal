@@ -541,7 +541,9 @@ Respond ONLY with valid JSON, no markdown, no backticks, in this exact format:
       const data=JSON.parse(raw);
       if(data.error) throw new Error(data.error);
       const text=data.result||"";
-      const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
+      const clean=text.replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/\s*```$/,"").trim();
+      console.log("Cleaned text:", clean.substring(0,100));
+      const parsed=JSON.parse(clean);
       setGList(parsed.categories.map(cat=>({...cat,items:cat.items.map(item=>({...item,checked:true}))})));
     }catch(e){console.error("Grocery error:",e);setGError("Failed: "+e.message);}
     setGLoading(false);
