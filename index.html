@@ -746,7 +746,15 @@ Respond ONLY with valid JSON, no markdown, no backticks, in this exact format:
       `## ⭐ Bucket List`,
       ...BUCKET_CATS.flatMap(cat=>{const items=catGroups[cat.id];if(!items.length)return[];return[`### ${cat.icon} ${cat.label}`,...items.map(b=>{const st=BUCKET_STATUSES.find(s=>s.id===b.status);return`- [${b.done?"x":" "}] **${b.title}** ${st?`${st.icon} ${st.label}`:""}${b.lockedDate?` · ${fDateShort(b.lockedDate)}`:""}${b.address?` · ${b.address}`:""} *(${b.addedBy})*${b.mapsUrl?` [Maps](${b.mapsUrl})`:""}`}),""];}),
       `## 🎒 To Bring`,...toBring.map(i=>`- [${i.checked?"x":" "}] ${i.item} *(${i.by})*`),"",
-      `## 🛒 To Buy`,...toBuy.map(i=>`- [${i.checked?"x":" "}] ${i.item} *(requested by ${i.by})*`),
+      `## 🛒 To Buy`,...toBuy.map(i=>`- [${i.checked?"x":" "}] ${i.item} *(requested by ${i.by})*`),"",
+      `## 🍽️ Meal Plan`,
+      ...(mealPlan?[
+        `- **Breakfasts at house:** ${mealPlan.breakfasts||0}`,
+        `- **Dinners at house:** ${mealPlan.dinners||0}`,
+        mealPlan.meals?`- **Planned meals:** ${mealPlan.meals}`:"",
+        mealPlan.coffee?"- ☕ Coffee drinkers in group":"",
+        mealPlan.extras?`- **Notes:** ${mealPlan.extras}`:"",
+      ].filter(Boolean):["_No meal plan saved yet._"]),
     ];
     setExpMd(lines.join("\n"));setShowExp(true);
   }
